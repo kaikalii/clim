@@ -28,19 +28,23 @@ where
 }
 
 pub fn print_erasable(s: &str) {
-    print!("{}    \r", s);
+    print!(
+        "{}    \r{}",
+        s,
+        if cfg!(debug_assertions) { "\n" } else { "" }
+    );
     let _ = io::Write::flush(&mut io::stdout());
 }
 
-// pub fn create_dirs<P>(path: P) -> io::Result<()>
-// where
-//     P: AsRef<Path>,
-// {
-//     let path = path.as_ref();
-//     if path.extension().is_some() {
-//         fs::create_dir_all(path.parent().unwrap())?;
-//     } else {
-//         fs::create_dir_all(path)?;
-//     }
-//     Ok(())
-// }
+pub fn create_dirs<P>(path: P) -> io::Result<()>
+where
+    P: AsRef<Path>,
+{
+    let path = path.as_ref();
+    if path.extension().is_some() {
+        fs::create_dir_all(path.parent().unwrap())?;
+    } else {
+        fs::create_dir_all(path)?;
+    }
+    Ok(())
+}

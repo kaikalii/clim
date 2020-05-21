@@ -7,6 +7,7 @@ use std::{
 };
 
 use indexmap::IndexSet;
+use pathdiff::diff_paths;
 use serde_derive::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
@@ -169,6 +170,8 @@ impl Game {
             if !mod_entry.file_type()?.is_dir() {
                 continue;
             }
+            let mod_path = mod_entry.path();
+            let mod_diff = differ(&mod_path);
             // Get the mod name
             let mod_name = mod_entry
                 .path()
@@ -200,7 +203,7 @@ impl Game {
                 .any(|entry| {
                     entry.path();
                     let is_file = entry.file_type().is_file();
-                    let exists = install_dir.join(entry.file_name()).exists();
+                    let exists = install_dir.join(mod_diff(&entry).unwrap()).exists();
                     is_file && exists
                 });
             // Install if necessary
@@ -209,8 +212,9 @@ impl Game {
                 for entry in WalkDir::new(mod_entry.path()) {
                     let file_entry = entry?;
                     if file_entry.file_type().is_file() {
-                        let extracted_path = mod_entry.path().join(file_entry.file_name());
-                        let install_path = self.install_dir().join(file_entry.file_name());
+                        let extracted_path = mod_entry.path().join(mod_diff(&file_entry).unwrap());
+                        let install_path = install_dir.join(mod_diff(&file_entry).unwrap());
+                        utils::create_dirs(&install_path)?;
                         let mut extracted_file = File::open(extracted_path)?;
                         let mut install_file = File::create(install_path)?;
                         io::copy(&mut extracted_file, &mut install_file)?;
@@ -222,7 +226,7 @@ impl Game {
             if !should_be_installed && any_installed {
                 for entry in WalkDir::new(mod_entry.path()) {
                     let file_entry = entry?;
-                    utils::remove_path(&install_dir, file_entry.file_name())?;
+                    utils::remove_path(&install_dir, mod_diff(&file_entry).unwrap())?;
                 }
                 println!("Uninstalled {:?}", mod_name);
             }
@@ -245,15 +249,16 @@ impl Game {
                 let mod_name = mod_name(entry.path()).unwrap();
                 // Get the extracted dir
                 let extracted_dir = library::extracted_dir(&self.name, &mod_name)?;
+                let mod_diff = differ(&extracted_dir);
                 // Delete if necessary
                 if !(self.config.enabled.contains(&mod_name)
                     || self.config.disabled.contains(&mod_name))
                 {
                     for entry in WalkDir::new(&extracted_dir) {
                         let file_entry = entry?;
-                        utils::remove_path(&install_dir, file_entry.file_name())?;
+                        utils::remove_path(&install_dir, mod_diff(&file_entry).unwrap())?;
                     }
-                    utils::remove_path(extracted_dir, "")?;
+                    utils::remove_path(&extracted_dir, "")?;
                     fs::remove_file(entry.path())?;
                     println!("Deleted {:?}", mod_name);
                 }
@@ -278,4 +283,11 @@ where
     file.as_ref()
         .file_stem()
         .map(|stem| stem.to_string_lossy().into_owned())
+}
+
+fn differ<P>(top: &P) -> impl Fn(&'_ walkdir::DirEntry) -> Option<PathBuf> + '_
+where
+    P: AsRef<Path>,
+{
+    move |entry| diff_paths(entry.path(), top)
 }
