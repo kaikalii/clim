@@ -16,7 +16,12 @@ where
     }
     // Delete empty folders
     while let Some(parent) = name.parent() {
-        let _ = fs::remove_dir(top.join(parent));
+        if parent.iter().count() == 0 {
+            break;
+        }
+        if fs::remove_dir(top.join(parent)).is_err() {
+            break;
+        }
         name = parent;
     }
     Ok(())
@@ -27,15 +32,15 @@ pub fn print_erasable(s: &str) {
     let _ = io::Write::flush(&mut io::stdout());
 }
 
-pub fn create_dirs<P>(path: P) -> io::Result<()>
-where
-    P: AsRef<Path>,
-{
-    let path = path.as_ref();
-    if path.extension().is_some() {
-        fs::create_dir_all(path.parent().unwrap())?;
-    } else {
-        fs::create_dir_all(path)?;
-    }
-    Ok(())
-}
+// pub fn create_dirs<P>(path: P) -> io::Result<()>
+// where
+//     P: AsRef<Path>,
+// {
+//     let path = path.as_ref();
+//     if path.extension().is_some() {
+//         fs::create_dir_all(path.parent().unwrap())?;
+//     } else {
+//         fs::create_dir_all(path)?;
+//     }
+//     Ok(())
+// }

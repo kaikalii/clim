@@ -3,14 +3,18 @@ use std::{
     fs::{self, File},
     io,
     path::{Path, PathBuf},
+    process::Command,
 };
 
 use indexmap::IndexSet;
 use serde_derive::{Deserialize, Serialize};
 use walkdir::WalkDir;
-use zip::ZipArchive;
 
-use crate::{fomod, library, utils};
+use crate::{
+    fomod,
+    library::{self, AndCreateDirs},
+    utils,
+};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GlobalConfig {
@@ -125,7 +129,6 @@ impl Game {
         fs::write(self.config_file()?, &string).map_err(Into::into)
     }
     fn extract(&mut self) -> crate::Result<()> {
-        let install_dir = self.install_dir();
         for entry in fs::read_dir(library::downloads_dir(&self.name)?)? {
             let entry = entry?;
             // If the entry is a file
@@ -136,38 +139,24 @@ impl Game {
                 let extracted_dir = library::extracted_dir(&self.name, &mod_name)?;
                 // Check if the mod should be installed
                 let should_be_installed = !self.config.disabled.contains(&mod_name);
-                // Load the archive
-                let mut archive = ZipArchive::new(File::open(entry.path())?)?;
                 // Check if any files from the mod are installed
-                let any_installed = archive
-                    .file_names()
-                    .any(|name| install_dir.join(name).exists());
-                // Install if necessary
-                if should_be_installed && !any_installed {
+                let is_extracted = extracted_dir.exists();
+                let extracted_dir = extracted_dir.and_create_dirs::<crate::Error>()?;
+                // Extract if necessary
+                if should_be_installed && !is_extracted {
                     utils::print_erasable(&format!("Extracting {:?}", mod_name));
-                    // For each file in the archive
-                    for i in 0..archive.len() {
-                        let mut zipped_file = archive.by_index(i)?;
-                        let extracted_path = extracted_dir.join(zipped_file.name());
-                        let install_path = install_dir.join(zipped_file.name());
-                        // Extract the file if it does not exist
-                        if !install_path.exists() {
-                            utils::create_dirs(&install_path)?;
-                            // Extract from the archive if necessary
-                            if !extracted_path.exists() {
-                                let mut extracted_file = File::create(extracted_path)?;
-                                io::copy(&mut zipped_file, &mut extracted_file)?;
-                            }
-                        }
+                    if Command::new("7z")
+                        .arg("x")
+                        .arg(entry.path())
+                        .arg(format!("-o{}", extracted_dir.to_string_lossy()))
+                        .output()?
+                        .status
+                        .success()
+                    {
+                        self.config.enabled.insert(mod_name.clone());
+                    } else {
+                        utils::remove_path(extracted_dir, "")?;
                     }
-                    self.config.enabled.insert(mod_name.clone());
-                }
-                // Uninstall if necessary
-                if !should_be_installed && any_installed {
-                    for name in archive.file_names() {
-                        utils::remove_path(&install_dir, name)?;
-                    }
-                    println!("Uninstalled {:?}", mod_name);
                 }
             }
         }
@@ -205,7 +194,7 @@ impl Game {
             // Check if the mod should be installed
             let should_be_installed = !self.config.disabled.contains(&mod_name);
             // Check if any files from the mod are installed
-            let any_installed = walkdir::WalkDir::new(mod_entry.path())
+            let any_installed = WalkDir::new(mod_entry.path())
                 .into_iter()
                 .filter_map(Result::ok)
                 .any(|entry| {
@@ -214,10 +203,10 @@ impl Game {
                     let exists = install_dir.join(entry.file_name()).exists();
                     is_file && exists
                 });
+            // Install if necessary
             if should_be_installed && !any_installed {
-                utils::print_erasable(&format!("Installing {:?}", mod_name));
                 // For each file
-                for entry in walkdir::WalkDir::new(mod_entry.path()) {
+                for entry in WalkDir::new(mod_entry.path()) {
                     let file_entry = entry?;
                     if file_entry.file_type().is_file() {
                         let extracted_path = mod_entry.path().join(file_entry.file_name());
@@ -228,6 +217,14 @@ impl Game {
                     }
                 }
                 println!("Installed {:?} ", mod_name);
+            }
+            // Uninstall if necessary
+            if !should_be_installed && any_installed {
+                for entry in WalkDir::new(mod_entry.path()) {
+                    let file_entry = entry?;
+                    utils::remove_path(&install_dir, file_entry.file_name())?;
+                }
+                println!("Uninstalled {:?}", mod_name);
             }
         }
         Ok(())
@@ -248,14 +245,13 @@ impl Game {
                 let mod_name = mod_name(entry.path()).unwrap();
                 // Get the extracted dir
                 let extracted_dir = library::extracted_dir(&self.name, &mod_name)?;
-                // Load the archive
-                let archive = ZipArchive::new(File::open(entry.path())?)?;
                 // Delete if necessary
                 if !(self.config.enabled.contains(&mod_name)
                     || self.config.disabled.contains(&mod_name))
                 {
-                    for name in archive.file_names() {
-                        utils::remove_path(&install_dir, name)?;
+                    for entry in WalkDir::new(&extracted_dir) {
+                        let file_entry = entry?;
+                        utils::remove_path(&install_dir, file_entry.file_name())?;
                     }
                     utils::remove_path(extracted_dir, "")?;
                     fs::remove_file(entry.path())?;

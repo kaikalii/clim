@@ -6,8 +6,6 @@ pub enum Error {
     Serialize(#[from] toml::ser::Error),
     #[error("Toml error: {0}")]
     Deserialize(#[from] toml::de::Error),
-    #[error("Archive error: {0}")]
-    Zip(#[from] zip::result::ZipError),
     #[error("No home directory")]
     NoHomeDirectory,
     #[error("Climm already manages {0}")]
