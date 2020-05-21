@@ -7,9 +7,10 @@ use std::{
 
 use indexmap::IndexSet;
 use serde_derive::{Deserialize, Serialize};
+use walkdir::WalkDir;
 use zip::ZipArchive;
 
-use crate::{library, utils};
+use crate::{fomod, library, utils};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GlobalConfig {
@@ -123,9 +124,8 @@ impl Game {
         let string = toml::to_string_pretty(&self.config)?;
         fs::write(self.config_file()?, &string).map_err(Into::into)
     }
-    pub fn update(&mut self) -> crate::Result<()> {
+    fn extract(&mut self) -> crate::Result<()> {
         let install_dir = self.install_dir();
-        // Extract downloads
         for entry in fs::read_dir(library::downloads_dir(&self.name)?)? {
             let entry = entry?;
             // If the entry is a file
@@ -171,46 +171,70 @@ impl Game {
                 }
             }
         }
-        // Install mods
+        Ok(())
+    }
+    fn install(&mut self) -> crate::Result<()> {
+        let install_dir = self.install_dir();
         for entry in fs::read_dir(library::extracted_dir(&self.name, "")?)? {
             let mod_entry = entry?;
-            if mod_entry.file_type()?.is_dir() {
-                let mod_name = mod_entry
-                    .path()
-                    .iter()
-                    .last()
-                    .expect("dir entry has empty path")
-                    .to_string_lossy()
-                    .into_owned();
-                // Check if the mod should be installed
-                let should_be_installed = !self.config.disabled.contains(&mod_name);
-                // Check if any files from the mod are installed
-                let any_installed = walkdir::WalkDir::new(mod_entry.path())
-                    .into_iter()
-                    .filter_map(Result::ok)
-                    .any(|entry| {
-                        entry.path();
-                        let is_file = entry.file_type().is_file();
-                        let exists = install_dir.join(entry.file_name()).exists();
-                        is_file && exists
-                    });
-                if should_be_installed && !any_installed {
-                    utils::print_erasable(&format!("Installing {:?}", mod_name));
-                    // For each file
-                    for entry in walkdir::WalkDir::new(mod_entry.path()) {
-                        let file_entry = entry?;
-                        if file_entry.file_type().is_file() {
-                            let extracted_path = mod_entry.path().join(file_entry.file_name());
-                            let install_path = self.install_dir().join(file_entry.file_name());
-                            let mut extracted_file = File::open(extracted_path)?;
-                            let mut install_file = File::create(install_path)?;
-                            io::copy(&mut extracted_file, &mut install_file)?;
-                        }
-                    }
-                    println!("Installed {:?} ", mod_name);
+            if !mod_entry.file_type()?.is_dir() {
+                continue;
+            }
+            // Get the mod name
+            let mod_name = mod_entry
+                .path()
+                .iter()
+                .last()
+                .expect("dir entry has empty path")
+                .to_string_lossy()
+                .into_owned();
+            // Check for fomod
+            if let Some(fomod_path) = ["fomod", "Fomod"]
+                .iter()
+                .map(|name| mod_entry.path().join(name))
+                .find(|path| path.is_dir())
+            {
+                if let (Ok(info_file), Ok(config_file)) = (
+                    File::open(fomod_path.join("info.xml")),
+                    File::open(fomod_path.join("ModuleConfig.xml")),
+                ) {
+                    fomod::Fomod::parse(info_file, config_file)?;
                 }
+                return Ok(());
+            }
+            // Check if the mod should be installed
+            let should_be_installed = !self.config.disabled.contains(&mod_name);
+            // Check if any files from the mod are installed
+            let any_installed = walkdir::WalkDir::new(mod_entry.path())
+                .into_iter()
+                .filter_map(Result::ok)
+                .any(|entry| {
+                    entry.path();
+                    let is_file = entry.file_type().is_file();
+                    let exists = install_dir.join(entry.file_name()).exists();
+                    is_file && exists
+                });
+            if should_be_installed && !any_installed {
+                utils::print_erasable(&format!("Installing {:?}", mod_name));
+                // For each file
+                for entry in walkdir::WalkDir::new(mod_entry.path()) {
+                    let file_entry = entry?;
+                    if file_entry.file_type().is_file() {
+                        let extracted_path = mod_entry.path().join(file_entry.file_name());
+                        let install_path = self.install_dir().join(file_entry.file_name());
+                        let mut extracted_file = File::open(extracted_path)?;
+                        let mut install_file = File::create(install_path)?;
+                        io::copy(&mut extracted_file, &mut install_file)?;
+                    }
+                }
+                println!("Installed {:?} ", mod_name);
             }
         }
+        Ok(())
+    }
+    pub fn update(&mut self) -> crate::Result<()> {
+        self.extract()?;
+        self.install()?;
         Ok(())
     }
     pub fn clean(&mut self) -> crate::Result<()> {

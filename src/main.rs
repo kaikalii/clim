@@ -1,6 +1,7 @@
 mod app;
-mod config;
 mod error;
+mod fomod;
+mod game;
 mod library;
 mod utils;
 use app::*;
@@ -16,7 +17,7 @@ fn main() {
 }
 
 fn run() -> Result<()> {
-    use config::*;
+    use game::*;
 
     let app = App::from_args();
 

@@ -18,6 +18,8 @@ pub enum Error {
     NoActiveGame,
     #[error("Directory walk error: {0}")]
     WalkDir(#[from] walkdir::Error),
+    #[error("Fomod error: {0}")]
+    Fomod(#[from] crate::fomod::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
