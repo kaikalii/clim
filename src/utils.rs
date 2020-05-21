@@ -23,7 +23,7 @@ where
 }
 
 pub fn print_erasable(s: &str) {
-    print!("{}\r", s);
+    print!("{}    \r", s);
     let _ = io::Write::flush(&mut io::stdout());
 }
 
@@ -32,9 +32,9 @@ where
     P: AsRef<Path>,
 {
     let path = path.as_ref();
-    if path.is_file() {
+    if path.extension().is_some() {
         fs::create_dir_all(path.parent().unwrap())?;
-    } else if path.is_dir() {
+    } else {
         fs::create_dir_all(path)?;
     }
     Ok(())

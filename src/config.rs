@@ -131,41 +131,56 @@ impl Game {
             if entry.file_type()?.is_file() {
                 // Get the mod name
                 let mod_name = mod_name(entry.path()).unwrap();
+                // Get the extracted dir
+                let extracted_dir = library::extracted_dir(&self.name, &mod_name)?;
                 // Check if the mod should be installed
                 let should_be_installed = !self.config.disabled.contains(&mod_name);
                 // Load the archive
                 let mut archive = ZipArchive::new(File::open(entry.path())?)?;
                 let install_dir = self.install_dir();
-                // Check if all files from the mod are installed
-                let is_installed = archive
+                // Check if any files from the mod are installed
+                let any_installed = archive
                     .file_names()
-                    .all(|name| install_dir.join(name).exists());
+                    .any(|name| install_dir.join(name).exists());
                 // Install if necessary
                 if should_be_installed {
-                    if !is_installed {
+                    if !any_installed {
                         utils::print_erasable(&format!("Installing {:?}", mod_name));
+                        // For each file in the archive
                         for i in 0..archive.len() {
                             let mut zipped_file = archive.by_index(i)?;
-                            let install_file = self.install_dir().join(zipped_file.name());
-                            utils::create_dirs(&install_file)?;
-                            let mut dest_file = File::create(install_file)?;
-                            io::copy(&mut zipped_file, &mut dest_file)?;
+                            let extracted_path = extracted_dir.join(zipped_file.name());
+                            let install_path = self.install_dir().join(zipped_file.name());
+                            // Install the file if it does not exist
+                            if !install_path.exists() {
+                                utils::create_dirs(&install_path)?;
+                                // Check if the file has been extraced
+                                if extracted_path.exists() {
+                                    // Copy the extracted file if it exists
+                                    let mut extracted_file = File::open(extracted_path)?;
+                                    let mut install_file = File::create(install_path)?;
+                                    io::copy(&mut extracted_file, &mut install_file)?;
+                                } else {
+                                    // Extract from the archive if necessary
+                                    let mut file_bytes = Vec::new();
+                                    let mut install_file = File::create(install_path)?;
+                                    let mut extracted_file = File::create(extracted_path)?;
+                                    io::copy(&mut zipped_file, &mut file_bytes)?;
+                                    io::copy(&mut file_bytes.as_slice(), &mut extracted_file)?;
+                                    io::copy(&mut file_bytes.as_slice(), &mut install_file)?;
+                                }
+                            }
                         }
                         println!("Installed {:?} ", mod_name);
                     }
                     self.config.enabled.insert(mod_name.clone());
                 }
                 // Uninstall if necessary
-                if !should_be_installed {
-                    let any_installed = archive
-                        .file_names()
-                        .any(|name| install_dir.join(name).exists());
-                    if any_installed {
-                        for name in archive.file_names() {
-                            utils::remove_file(&install_dir, name)?;
-                        }
-                        println!("Uninstalled {:?}", mod_name);
+                if !should_be_installed && any_installed {
+                    for name in archive.file_names() {
+                        utils::remove_file(&install_dir, name)?;
                     }
+                    println!("Uninstalled {:?}", mod_name);
                 }
             }
         }

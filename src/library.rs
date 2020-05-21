@@ -40,6 +40,6 @@ pub fn downloads_dir(game: &str) -> crate::Result<PathBuf> {
     game_dir(game).and_then(|game| game.join("downloads").and_create_dirs())
 }
 
-// pub fn extracted_dir(game: &str) -> crate::Result<PathBuf> {
-//     game_dir(game).and_then(|game| game.join("extracted").and_create_dirs())
-// }
+pub fn extracted_dir(game: &str, mod_name: &str) -> crate::Result<PathBuf> {
+    game_dir(game).and_then(|game| game.join("extracted").join(mod_name).and_create_dirs())
+}
