@@ -1,7 +1,7 @@
 use std::{
     collections::HashSet,
     fs::{self, File},
-    io,
+    io::{self, Write},
     path::{Path, PathBuf},
     process::Command,
 };
@@ -41,6 +41,7 @@ impl GlobalConfig {
         name: String,
         folder: PathBuf,
         data: Option<PathBuf>,
+        plugins: Option<PathBuf>,
     ) -> crate::Result<()> {
         if self.games.contains(&name) {
             return Err(crate::Error::AlreadyManaged(name));
@@ -52,6 +53,7 @@ impl GlobalConfig {
             config: Config {
                 data_folder: data,
                 game_folder: folder,
+                plugins_file: plugins,
                 mods: IndexMap::new(),
             },
         }
@@ -109,13 +111,15 @@ pub struct Config {
     pub game_folder: PathBuf,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data_folder: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugins_file: Option<PathBuf>,
     #[serde(default)]
     pub mods: IndexMap<String, InstalledMod>,
 }
 
 pub struct Game {
-    name: String,
-    config: Config,
+    pub name: String,
+    pub config: Config,
 }
 
 const GAME_CONFIG_FILE: &str = "climm.toml";
@@ -165,8 +169,7 @@ impl Game {
                     self.config
                         .mods
                         .entry(mod_name.clone())
-                        .or_insert_with(Default::default)
-                        .enabled = true;
+                        .or_insert_with(Default::default);
                 } else {
                     utils::print_erasable(&format!("Extracting {:?}", mod_name));
                     if Command::new("7z")
@@ -191,23 +194,32 @@ impl Game {
         }
         Ok(())
     }
+    fn mods_ordered(&mut self) -> crate::Result<Vec<(&str, &mut InstalledMod, PathBuf)>> {
+        let name = &self.name;
+        self.config
+            .mods
+            .iter_mut()
+            .map(|(mod_name, im)| {
+                let name_lower = mod_name.to_lowercase();
+                let mod_path = fs::read_dir(library::extracted_dir(name, "")?)?
+                    .filter_map(Result::ok)
+                    .find(|entry| {
+                        entry.path().is_dir()
+                            && entry
+                                .path()
+                                .to_string_lossy()
+                                .to_lowercase()
+                                .contains(&name_lower)
+                    })
+                    .map(|entry| entry.path())
+                    .ok_or_else(|| crate::Error::UnknownArchive(mod_name.clone()))?;
+                Ok((mod_name.as_str(), im, mod_path))
+            })
+            .collect()
+    }
     fn install(&mut self) -> crate::Result<()> {
         let install_dir = self.install_dir();
-        for (mod_name, im) in self.config.mods.iter_mut() {
-            let name_lower = mod_name.to_lowercase();
-            let mod_path = fs::read_dir(library::extracted_dir(&self.name, "")?)?
-                .filter_map(Result::ok)
-                .find(|entry| {
-                    entry.path().is_dir()
-                        && entry
-                            .path()
-                            .to_string_lossy()
-                            .to_lowercase()
-                            .contains(&name_lower)
-                })
-                .map(|entry| entry.path())
-                .ok_or_else(|| crate::Error::UnknownArchive(mod_name.clone()))?;
-
+        for (mod_name, im, mod_path) in self.mods_ordered()? {
             // Install if necessary
             if im.enabled && !im.installed {
                 // Check for fomod
@@ -258,9 +270,33 @@ impl Game {
         }
         Ok(())
     }
+    pub fn write_plugins(&mut self) -> crate::Result<()> {
+        if let Some(plugins) = self.config.plugins_file.clone() {
+            let mods_ordered = self.mods_ordered()?;
+            let mut file = File::create(plugins)?;
+            for (_, im, path) in mods_ordered {
+                if im.enabled {
+                    for entry in WalkDir::new(path).into_iter().filter_map(Result::ok) {
+                        if let Some(ext) = entry.path().extension() {
+                            if ["esp", "esm", "esl"].contains(&ext.to_string_lossy().as_ref()) {
+                                writeln!(
+                                    file,
+                                    "*{}",
+                                    entry.path().file_name().unwrap().to_string_lossy()
+                                )?;
+                            }
+                        }
+                    }
+                }
+            }
+            println!("Wrote plugins")
+        }
+        Ok(())
+    }
     pub fn update(&mut self) -> crate::Result<()> {
         self.extract()?;
         self.install()?;
+        self.write_plugins()?;
         Ok(())
     }
     pub fn clean(&mut self) -> crate::Result<()> {

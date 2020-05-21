@@ -16,4 +16,6 @@ pub enum App {
         #[structopt(long, short)]
         global: bool,
     },
+    Downloads,
+    GameFolder,
 }

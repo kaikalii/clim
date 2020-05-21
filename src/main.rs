@@ -29,7 +29,7 @@ fn run() -> Result<()> {
             game_folder,
             data,
         } => {
-            gc.init_game(name, game_folder, data)?;
+            gc.init_game(name, game_folder, data, None)?;
         }
         App::Update => gc.active_game()?.update()?,
         App::Clean => gc.active_game()?.clean()?,
@@ -39,6 +39,12 @@ fn run() -> Result<()> {
             } else {
                 gc.active_game()?.config_file()?
             })?;
+        }
+        App::Downloads => {
+            open::that(library::downloads_dir(&gc.active_game()?.name)?)?;
+        }
+        App::GameFolder => {
+            open::that(&gc.active_game()?.config.game_folder)?;
         }
     }
 
