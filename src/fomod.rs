@@ -1,6 +1,11 @@
 #![allow(dead_code, unused_variables)]
 
-use std::{borrow::Cow, io::Read, path::PathBuf};
+use std::{
+    borrow::Cow,
+    fs,
+    io::{stdin, stdout, BufRead, Read, Write},
+    path::{Path, PathBuf},
+};
 
 use serde_derive::Deserialize;
 use xmltree::Element;
@@ -50,9 +55,8 @@ pub struct Fomod {
 }
 
 impl Fomod {
-    pub fn parse<I, C>(_info: I, config: C) -> Result<Self, Error>
+    pub fn parse<C>(config: C) -> Result<Self, Error>
     where
-        I: Read,
         C: Read,
     {
         let config_tree = Element::parse(config)?;
@@ -143,7 +147,7 @@ impl Fomod {
                     .collect::<Result<Vec<_>, Error>>()?
             },
         };
-        Ok(dbg!(fomod))
+        Ok(fomod)
     }
 }
 
@@ -169,4 +173,41 @@ fn children_attributes<'a>(
 
 fn child_text<'a>(elem: &'a Element, name: &str) -> Result<Cow<'a, str>, Error> {
     child(elem, name).map(|elem| elem.get_text().unwrap())
+}
+
+pub fn pseudo_fomod<P>(top: P) -> crate::Result<Vec<PathBuf>>
+where
+    P: AsRef<Path>,
+{
+    let mut path = top.as_ref().to_path_buf();
+    // Find main folder
+    while fs::read_dir(&path)?.filter_map(Result::ok).count() == 1 {
+        path = fs::read_dir(&path)?
+            .filter_map(Result::ok)
+            .next()
+            .unwrap()
+            .path();
+    }
+    let mut install_paths = Vec::new();
+    for entry in fs::read_dir(path)?.filter_map(Result::ok) {
+        if entry.file_type()?.is_dir() {
+            let lowest = entry.path().iter().last().unwrap().to_owned();
+            let starts_with_num = lowest
+                .to_string_lossy()
+                .chars()
+                .next()
+                .map_or(false, |c| c.is_digit(10));
+            if starts_with_num {
+                print!("Would you like to install {:?}? (yes/no) ", lowest);
+                stdout().flush()?;
+                let input = stdin().lock().lines().next().unwrap()?.to_lowercase();
+                if input.starts_with('y') {
+                    install_paths.push(entry.path());
+                } else if !input.starts_with('n') {
+                    println!("Please type yes or no");
+                }
+            }
+        }
+    }
+    Ok(install_paths)
 }

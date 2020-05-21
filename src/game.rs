@@ -172,7 +172,6 @@ impl Game {
                 continue;
             }
             let mod_path = mod_entry.path();
-            let mod_diff = differ(&mod_path);
             // Get the mod name
             let mod_name = mod_entry
                 .path()
@@ -181,63 +180,47 @@ impl Game {
                 .expect("dir entry has empty path")
                 .to_string_lossy()
                 .into_owned();
-            // Check for fomod
-            let info = WalkDir::new(mod_entry.path())
-                .into_iter()
-                .filter_map(Result::ok)
-                .find(|entry| {
-                    entry
-                        .path()
-                        .file_name()
-                        .map_or(false, |name| name == "info.xml")
-                })
-                .map(DirEntry::into_path);
-            let config = WalkDir::new(mod_entry.path())
-                .into_iter()
-                .filter_map(Result::ok)
-                .find(|entry| {
-                    entry
-                        .path()
-                        .file_name()
-                        .map_or(false, |name| name == "ModuleConfig.xml")
-                })
-                .map(DirEntry::into_path);
-            if let (Some(info), Some(config)) = (info, config) {
-                if let (Ok(info_file), Ok(config_file)) = (File::open(info), File::open(config)) {
-                    fomod::Fomod::parse(info_file, config_file)?;
-                }
-                return Ok(());
-            }
             // Check if the mod should be installed
             let should_be_installed = !self.config.disabled.contains(&mod_name);
-            // Check if any files from the mod are installed
-            let any_installed = WalkDir::new(mod_entry.path())
-                .into_iter()
-                .filter_map(Result::ok)
-                .any(|entry| {
-                    entry.path();
-                    let is_file = entry.file_type().is_file();
-                    let exists = install_dir.join(mod_diff(&entry).unwrap()).exists();
-                    is_file && exists
-                });
             // Install if necessary
-            if should_be_installed && !any_installed {
-                // For each file
-                for entry in WalkDir::new(mod_entry.path()) {
-                    let file_entry = entry?;
-                    if file_entry.file_type().is_file() {
-                        let extracted_path = mod_entry.path().join(mod_diff(&file_entry).unwrap());
-                        let install_path = install_dir.join(mod_diff(&file_entry).unwrap());
-                        utils::create_dirs(&install_path)?;
-                        let mut extracted_file = File::open(extracted_path)?;
-                        let mut install_file = File::create(install_path)?;
-                        io::copy(&mut extracted_file, &mut install_file)?;
+            if should_be_installed {
+                // Check for fomod
+                let config = WalkDir::new(mod_entry.path())
+                    .into_iter()
+                    .filter_map(Result::ok)
+                    .find(|entry| {
+                        entry
+                            .path()
+                            .file_name()
+                            .map_or(false, |name| name == "ModuleConfig.xml")
+                    })
+                    .map(DirEntry::into_path);
+                let install_paths = if config.is_some() {
+                    fomod::pseudo_fomod(mod_entry.path())?
+                } else {
+                    vec![mod_entry.path()]
+                };
+                // For each folder
+                for path in install_paths {
+                    let mod_diff = differ(&path);
+                    // For each file
+                    for entry in WalkDir::new(&path) {
+                        let file_entry = entry?;
+                        if file_entry.file_type().is_file() {
+                            let extracted_path = path.join(mod_diff(&file_entry).unwrap());
+                            let install_path = install_dir.join(mod_diff(&file_entry).unwrap());
+                            utils::create_dirs(&install_path)?;
+                            let mut extracted_file = File::open(extracted_path)?;
+                            let mut install_file = File::create(install_path)?;
+                            io::copy(&mut extracted_file, &mut install_file)?;
+                        }
                     }
                 }
                 println!("Installed {:?} ", mod_name);
             }
             // Uninstall if necessary
-            if !should_be_installed && any_installed {
+            else {
+                let mod_diff = differ(&mod_path);
                 for entry in WalkDir::new(mod_entry.path()) {
                     let file_entry = entry?;
                     utils::remove_path(&install_dir, mod_diff(&file_entry).unwrap())?;
