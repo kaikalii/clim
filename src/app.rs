@@ -18,4 +18,7 @@ pub enum App {
     },
     Downloads,
     GameFolder,
+    SetActive {
+        name: String,
+    },
 }

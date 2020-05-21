@@ -46,6 +46,13 @@ fn run() -> Result<()> {
         App::GameFolder => {
             open::that(&gc.active_game()?.config.game_folder)?;
         }
+        App::SetActive { name } => {
+            if gc.games.contains(&name) {
+                gc.active_game = Some(name);
+            } else {
+                return Err(Error::UnknownGame(name));
+            }
+        }
     }
 
     Ok(())
