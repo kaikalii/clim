@@ -16,6 +16,8 @@ pub enum Error {
     UnknownGame(String),
     #[error("No active game")]
     NoActiveGame,
+    #[error("Directory walk error: {0}")]
+    WalkDir(#[from] walkdir::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

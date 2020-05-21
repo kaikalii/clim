@@ -124,7 +124,8 @@ impl Game {
         fs::write(self.config_file()?, &string).map_err(Into::into)
     }
     pub fn update(&mut self) -> crate::Result<()> {
-        // Iterate over all downloaded mods
+        let install_dir = self.install_dir();
+        // Extract downloads
         for entry in fs::read_dir(library::downloads_dir(&self.name)?)? {
             let entry = entry?;
             // If the entry is a file
@@ -137,41 +138,29 @@ impl Game {
                 let should_be_installed = !self.config.disabled.contains(&mod_name);
                 // Load the archive
                 let mut archive = ZipArchive::new(File::open(entry.path())?)?;
-                let install_dir = self.install_dir();
                 // Check if any files from the mod are installed
                 let any_installed = archive
                     .file_names()
                     .any(|name| install_dir.join(name).exists());
                 // Install if necessary
                 if should_be_installed && !any_installed {
-                    utils::print_erasable(&format!("Installing {:?}", mod_name));
+                    utils::print_erasable(&format!("Extracting {:?}", mod_name));
                     // For each file in the archive
                     for i in 0..archive.len() {
                         let mut zipped_file = archive.by_index(i)?;
                         let extracted_path = extracted_dir.join(zipped_file.name());
-                        let install_path = self.install_dir().join(zipped_file.name());
-                        // Install the file if it does not exist
+                        let install_path = install_dir.join(zipped_file.name());
+                        // Extract the file if it does not exist
                         if !install_path.exists() {
                             utils::create_dirs(&install_path)?;
-                            // Check if the file has been extraced
-                            if extracted_path.exists() {
-                                // Copy the extracted file if it exists
-                                let mut extracted_file = File::open(extracted_path)?;
-                                let mut install_file = File::create(install_path)?;
-                                io::copy(&mut extracted_file, &mut install_file)?;
-                            } else {
-                                // Extract from the archive if necessary
-                                let mut file_bytes = Vec::new();
-                                let mut install_file = File::create(install_path)?;
+                            // Extract from the archive if necessary
+                            if !extracted_path.exists() {
                                 let mut extracted_file = File::create(extracted_path)?;
-                                io::copy(&mut zipped_file, &mut file_bytes)?;
-                                io::copy(&mut file_bytes.as_slice(), &mut extracted_file)?;
-                                io::copy(&mut file_bytes.as_slice(), &mut install_file)?;
+                                io::copy(&mut zipped_file, &mut extracted_file)?;
                             }
                         }
                     }
                     self.config.enabled.insert(mod_name.clone());
-                    println!("Installed {:?} ", mod_name);
                 }
                 // Uninstall if necessary
                 if !should_be_installed && any_installed {
@@ -190,6 +179,46 @@ impl Game {
                     utils::remove_path(extracted_dir, "")?;
                     fs::remove_file(entry.path())?;
                     println!("Deleted {:?}", mod_name);
+                }
+            }
+        }
+        // Install mods
+        for entry in fs::read_dir(library::extracted_dir(&self.name, "")?)? {
+            let mod_entry = entry?;
+            if mod_entry.file_type()?.is_dir() {
+                let mod_name = mod_entry
+                    .path()
+                    .iter()
+                    .last()
+                    .expect("dir entry has empty path")
+                    .to_string_lossy()
+                    .into_owned();
+                // Check if the mod should be installed
+                let should_be_installed = !self.config.disabled.contains(&mod_name);
+                // Check if any files from the mod are installed
+                let any_installed = walkdir::WalkDir::new(mod_entry.path())
+                    .into_iter()
+                    .filter_map(Result::ok)
+                    .any(|entry| {
+                        entry.path();
+                        let is_file = entry.file_type().is_file();
+                        let exists = install_dir.join(entry.file_name()).exists();
+                        is_file && exists
+                    });
+                if should_be_installed && !any_installed {
+                    utils::print_erasable(&format!("Installing {:?}", mod_name));
+                    // For each file
+                    for entry in walkdir::WalkDir::new(mod_entry.path()) {
+                        let file_entry = entry?;
+                        if file_entry.file_type().is_file() {
+                            let extracted_path = mod_entry.path().join(file_entry.file_name());
+                            let install_path = self.install_dir().join(file_entry.file_name());
+                            let mut extracted_file = File::open(extracted_path)?;
+                            let mut install_file = File::create(install_path)?;
+                            io::copy(&mut extracted_file, &mut install_file)?;
+                        }
+                    }
+                    println!("Installed {:?} ", mod_name);
                 }
             }
         }
