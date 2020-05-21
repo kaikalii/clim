@@ -1,0 +1,41 @@
+use std::{fs, io, path::Path};
+
+pub fn remove_file<P, Q>(top: P, name: Q) -> io::Result<()>
+where
+    P: AsRef<Path>,
+    Q: AsRef<Path>,
+{
+    let top = top.as_ref();
+    let mut name = name.as_ref();
+    // Delete file
+    let path = top.join(name);
+    if path.is_file() {
+        fs::remove_file(path)?;
+    } else if path.is_dir() {
+        fs::remove_dir_all(path)?;
+    }
+    // Delete empty folders
+    while let Some(parent) = name.parent() {
+        let _ = fs::remove_dir(top.join(parent));
+        name = parent;
+    }
+    Ok(())
+}
+
+pub fn print_erasable(s: &str) {
+    print!("{}\r", s);
+    let _ = io::Write::flush(&mut io::stdout());
+}
+
+pub fn create_dirs<P>(path: P) -> io::Result<()>
+where
+    P: AsRef<Path>,
+{
+    let path = path.as_ref();
+    if path.is_file() {
+        fs::create_dir_all(path.parent().unwrap())?;
+    } else if path.is_dir() {
+        fs::create_dir_all(path)?;
+    }
+    Ok(())
+}

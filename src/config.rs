@@ -9,7 +9,7 @@ use indexmap::IndexSet;
 use serde_derive::{Deserialize, Serialize};
 use zip::ZipArchive;
 
-use crate::library;
+use crate::{library, utils};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GlobalConfig {
@@ -143,11 +143,12 @@ impl Game {
                 // Install if necessary
                 if should_be_installed {
                     if !is_installed {
-                        print_erasable(&format!("Installing {:?}", mod_name));
+                        utils::print_erasable(&format!("Installing {:?}", mod_name));
                         for i in 0..archive.len() {
                             let mut zipped_file = archive.by_index(i)?;
-                            let mut dest_file =
-                                File::create(self.install_dir().join(zipped_file.name()))?;
+                            let install_file = self.install_dir().join(zipped_file.name());
+                            utils::create_dirs(&install_file)?;
+                            let mut dest_file = File::create(install_file)?;
                             io::copy(&mut zipped_file, &mut dest_file)?;
                         }
                         println!("Installed {:?} ", mod_name);
@@ -161,7 +162,7 @@ impl Game {
                         .any(|name| install_dir.join(name).exists());
                     if any_installed {
                         for name in archive.file_names() {
-                            remove_path(install_dir.join(name))?;
+                            utils::remove_file(&install_dir, name)?;
                         }
                         println!("Uninstalled {:?}", mod_name);
                     }
@@ -187,22 +188,4 @@ where
     file.as_ref()
         .file_stem()
         .map(|stem| stem.to_string_lossy().into_owned())
-}
-
-fn remove_path<P>(path: P) -> io::Result<()>
-where
-    P: AsRef<Path>,
-{
-    let path = path.as_ref();
-    if path.is_file() {
-        fs::remove_file(path)?;
-    } else if path.is_dir() {
-        fs::remove_dir_all(path)?;
-    }
-    Ok(())
-}
-
-fn print_erasable(s: &str) {
-    print!("{}\r", s);
-    let _ = io::Write::flush(&mut io::stdout());
 }

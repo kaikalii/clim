@@ -2,6 +2,7 @@ mod app;
 mod config;
 mod error;
 mod library;
+mod utils;
 use app::*;
 
 use structopt::StructOpt;
