@@ -1,12 +1,12 @@
 use std::{
     collections::HashSet,
     fs::{self, File},
-    io::{self, Write},
+    io::Write,
     path::{Path, PathBuf},
     process::Command,
 };
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use pathdiff::diff_paths;
 use serde_derive::{Deserialize, Serialize};
 use walkdir::{DirEntry, WalkDir};
@@ -54,6 +54,7 @@ impl GlobalConfig {
                 data_folder: data,
                 game_folder: folder,
                 plugins_file: plugins,
+                deployment: DeploymentMethod::default(),
                 mods: IndexMap::new(),
             },
         }
@@ -95,8 +96,8 @@ pub struct InstalledMod {
     pub enabled: bool,
     #[serde(default = "_true", skip_serializing_if = "Clone::clone")]
     pub installed: bool,
-    #[serde(default, skip_serializing_if = "HashSet::is_empty")]
-    pub parts: HashSet<PathBuf>,
+    #[serde(default, skip_serializing_if = "IndexSet::is_empty")]
+    pub parts: IndexSet<PathBuf>,
 }
 
 impl Default for InstalledMod {
@@ -104,8 +105,21 @@ impl Default for InstalledMod {
         InstalledMod {
             enabled: true,
             installed: false,
-            parts: HashSet::new(),
+            parts: IndexSet::new(),
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename = "snake_case")]
+pub enum DeploymentMethod {
+    Hardlink,
+    Symlink,
+}
+
+impl Default for DeploymentMethod {
+    fn default() -> Self {
+        DeploymentMethod::Hardlink
     }
 }
 
@@ -114,6 +128,8 @@ pub struct Config {
     pub game_folder: PathBuf,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data_folder: Option<PathBuf>,
+    #[serde(default)]
+    pub deployment: DeploymentMethod,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plugins_file: Option<PathBuf>,
     #[serde(default)]
@@ -222,8 +238,9 @@ impl Game {
     }
     fn install(&mut self) -> crate::Result<()> {
         let install_dir = self.install_dir();
+        let deployment = self.config.deployment;
         for (mod_name, im, mod_path) in self.mods_ordered()? {
-            dbg!(mod_name, &im, &mod_path);
+            let mod_diff = differ(&mod_path);
             // Install if necessary
             if im.enabled && !im.installed {
                 // Check for fomod
@@ -237,31 +254,45 @@ impl Game {
                             .map_or(false, |name| name == "ModuleConfig.xml")
                     })
                     .map(DirEntry::into_path);
-                let install_paths = if config.is_some() {
+                let install_folders = if config.is_some() {
                     println!(
                         "{:?} has a Fomod installer, but climm does not currently support it. \
                         You can still select which sections you want to install.",
                         mod_name
                     );
                     let paths = fomod::pseudo_fomod(&mod_path)?;
-                    im.parts = paths.iter().cloned().collect();
+                    im.parts = paths
+                        .iter()
+                        .map(|part_path| mod_diff(part_path).unwrap())
+                        .collect();
                     paths
                 } else {
-                    vec![mod_path]
+                    vec![mod_path.clone()]
                 };
                 // For each folder
-                for path in install_paths {
-                    let mod_diff = differ(&path);
+                for folder in install_folders {
+                    let folder_diff = differ(&folder);
                     // For each file
-                    for entry in WalkDir::new(&path) {
+                    for entry in WalkDir::new(&folder) {
                         let file_entry = entry?;
                         if file_entry.file_type().is_file() {
-                            let extracted_path = path.join(mod_diff(&file_entry).unwrap());
-                            let install_path = install_dir.join(mod_diff(&file_entry).unwrap());
+                            let extracted_path =
+                                folder.join(folder_diff(&file_entry.path()).unwrap());
+                            let install_path =
+                                install_dir.join(folder_diff(&file_entry.path()).unwrap());
                             utils::create_dirs(&install_path)?;
-                            let mut extracted_file = File::open(extracted_path)?;
-                            let mut install_file = File::create(install_path)?;
-                            io::copy(&mut extracted_file, &mut install_file)?;
+                            // Deploy
+                            match deployment {
+                                DeploymentMethod::Hardlink => {
+                                    fs::hard_link(extracted_path, install_path)?
+                                }
+                                DeploymentMethod::Symlink => {
+                                    #[cfg(unix)]
+                                    std::os::unix::fs::symlink(extracted_path, install_path)?;
+                                    #[cfg(windows)]
+                                    std::os::windows::fs::hardlink(extracted_path, install_path)?;
+                                }
+                            }
                         }
                     }
                 }
@@ -270,10 +301,9 @@ impl Game {
             }
             // Uninstall if necessary
             else if !im.enabled && im.installed {
-                let mod_diff = differ(&mod_path);
                 for entry in WalkDir::new(&mod_path) {
                     let file_entry = entry?;
-                    utils::remove_path(&install_dir, mod_diff(&file_entry).unwrap())?;
+                    utils::remove_path(&install_dir, mod_diff(&file_entry.path()).unwrap())?;
                 }
                 im.installed = false;
                 println!("Uninstalled {:?}", mod_name);
@@ -287,14 +317,24 @@ impl Game {
             let mut file = File::create(plugins)?;
             for (_, im, path) in mods_ordered {
                 if im.enabled {
-                    for entry in WalkDir::new(path).into_iter().filter_map(Result::ok) {
-                        if let Some(ext) = entry.path().extension() {
-                            if ["esp", "esm", "esl"].contains(&ext.to_string_lossy().as_ref()) {
-                                writeln!(
-                                    file,
-                                    "*{}",
-                                    entry.path().file_name().unwrap().to_string_lossy()
-                                )?;
+                    let install_folders = if im.parts.is_empty() {
+                        vec![path]
+                    } else {
+                        im.parts
+                            .iter()
+                            .map(|part_path| path.join(part_path))
+                            .collect()
+                    };
+                    for folder in install_folders {
+                        for entry in WalkDir::new(folder).into_iter().filter_map(Result::ok) {
+                            if let Some(ext) = entry.path().extension() {
+                                if ["esp", "esm", "esl"].contains(&ext.to_string_lossy().as_ref()) {
+                                    writeln!(
+                                        file,
+                                        "*{}",
+                                        entry.path().file_name().unwrap().to_string_lossy()
+                                    )?;
+                                }
                             }
                         }
                     }
@@ -326,7 +366,7 @@ impl Game {
                 if !self.config.mods.contains_key(&mod_name) {
                     for entry in WalkDir::new(&extracted_dir) {
                         let file_entry = entry?;
-                        utils::remove_path(&install_dir, mod_diff(&file_entry).unwrap())?;
+                        utils::remove_path(&install_dir, mod_diff(&file_entry.path()).unwrap())?;
                     }
                     utils::remove_path(&extracted_dir, "")?;
                     fs::remove_file(entry.path())?;
@@ -355,9 +395,9 @@ where
         .map(|stem| stem.to_string_lossy().into_owned())
 }
 
-fn differ<P>(top: &P) -> impl Fn(&'_ DirEntry) -> Option<PathBuf> + '_
+fn differ<P>(top: &P) -> impl Fn(&'_ Path) -> Option<PathBuf> + '_
 where
     P: AsRef<Path>,
 {
-    move |entry| diff_paths(entry.path(), top)
+    move |path| diff_paths(path, top)
 }
