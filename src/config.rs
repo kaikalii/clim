@@ -1,6 +1,7 @@
 use std::{
     collections::HashSet,
-    fs,
+    fs::{self, File},
+    io,
     path::{Path, PathBuf},
 };
 
@@ -44,11 +45,13 @@ impl GlobalConfig {
             name: name.clone(),
             config: Config {
                 data_folder: data,
+                game_folder: folder,
                 enabled: IndexSet::new(),
                 disabled: HashSet::new(),
             },
         }
         .save()?;
+        library::downloads_dir(&name)?;
         println!("Climm initialized {}", name);
         Ok(())
     }
@@ -77,12 +80,19 @@ impl Drop for GlobalConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
+    pub game_folder: PathBuf,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data_folder: Option<PathBuf>,
     #[serde(default)]
     pub enabled: IndexSet<String>,
     #[serde(default)]
     pub disabled: HashSet<String>,
+}
+
+impl Config {
+    pub fn contains(&self, name: &str) -> bool {
+        self.enabled.contains(name) || self.disabled.contains(name)
+    }
 }
 
 pub struct Game {
@@ -100,6 +110,13 @@ impl Game {
     pub fn config_file(&self) -> crate::Result<PathBuf> {
         game_config_file(&self.name)
     }
+    pub fn install_dir(&self) -> PathBuf {
+        if let Some(data) = &self.config.data_folder {
+            self.config.game_folder.join(data)
+        } else {
+            self.config.game_folder.clone()
+        }
+    }
     pub fn open(name: &str) -> crate::Result<Self> {
         let bytes = fs::read(game_config_file(name)?)?;
         let config: Config = toml::from_slice(&bytes)?;
@@ -112,10 +129,26 @@ impl Game {
         let bytes = toml::to_vec(&self.config)?;
         fs::write(self.config_file()?, &bytes).map_err(Into::into)
     }
-    // pub fn update(&mut self) -> crate::Result<()> {
-    //     for entry in fs::read_dir(&self.path)? {}
-    //     Ok(())
-    // }
+    pub fn update(&mut self) -> crate::Result<()> {
+        for entry in fs::read_dir(library::downloads_dir(&self.name)?)? {
+            let entry = entry?;
+            if entry.file_type()?.is_file() {
+                let mod_name = mod_name(entry.path()).unwrap();
+                if !self.config.contains(&mod_name) {
+                    let mut archive = ZipArchive::new(File::open(entry.path())?)?;
+                    for i in 0..archive.len() {
+                        let mut zipped_file = archive.by_index(i)?;
+                        let mut dest_file =
+                            File::create(self.install_dir().join(zipped_file.name()))?;
+                        io::copy(&mut zipped_file, &mut dest_file)?;
+                    }
+                    self.config.enabled.insert(mod_name.clone());
+                    println!("Installed {:?}", mod_name);
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Drop for Game {
@@ -124,4 +157,13 @@ impl Drop for Game {
             println!("Error saving config: {}", e);
         }
     }
+}
+
+fn mod_name<P>(file: P) -> Option<String>
+where
+    P: AsRef<Path>,
+{
+    file.as_ref()
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
 }

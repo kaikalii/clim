@@ -10,4 +10,5 @@ pub enum App {
         #[structopt(long, short)]
         data: Option<PathBuf>,
     },
+    Update,
 }

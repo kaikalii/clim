@@ -17,14 +17,21 @@ fn main() {
 fn run() -> Result<()> {
     use config::*;
 
-    match App::from_args() {
+    let app = App::from_args();
+
+    let mut gc = GlobalConfig::open()?;
+
+    match app {
         App::Init {
             name,
             game_folder,
             data,
         } => {
-            let mut gc = GlobalConfig::open()?;
             gc.init_game(name, game_folder, data)?;
+        }
+        App::Update => {
+            let mut game = gc.active_game()?;
+            game.update()?;
         }
     }
 
