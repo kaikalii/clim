@@ -166,15 +166,22 @@ impl Game {
     }
     fn install(&mut self) -> crate::Result<()> {
         let install_dir = self.install_dir();
-        for entry in fs::read_dir(library::extracted_dir(&self.name, "")?)? {
-            let mod_entry = entry?;
-            if !mod_entry.file_type()?.is_dir() {
-                continue;
-            }
-            let mod_path = mod_entry.path();
+        for enabled in &self.config.enabled {
+            let enabled_lower = enabled.to_lowercase();
+            let mod_path = fs::read_dir(library::extracted_dir(&self.name, "")?)?
+                .filter_map(Result::ok)
+                .find(|entry| {
+                    entry.path().is_dir()
+                        && entry
+                            .path()
+                            .to_string_lossy()
+                            .to_lowercase()
+                            .contains(&enabled_lower)
+                })
+                .map(|entry| entry.path())
+                .ok_or_else(|| crate::Error::UnknownArchive(enabled.clone()))?;
             // Get the mod name
-            let mod_name = mod_entry
-                .path()
+            let mod_name = mod_path
                 .iter()
                 .last()
                 .expect("dir entry has empty path")
@@ -182,10 +189,11 @@ impl Game {
                 .into_owned();
             // Check if the mod should be installed
             let should_be_installed = !self.config.disabled.contains(&mod_name);
+
             // Install if necessary
             if should_be_installed {
                 // Check for fomod
-                let config = WalkDir::new(mod_entry.path())
+                let config = WalkDir::new(&mod_path)
                     .into_iter()
                     .filter_map(Result::ok)
                     .find(|entry| {
@@ -196,9 +204,9 @@ impl Game {
                     })
                     .map(DirEntry::into_path);
                 let install_paths = if config.is_some() {
-                    fomod::pseudo_fomod(mod_entry.path())?
+                    fomod::pseudo_fomod(&mod_path)?
                 } else {
-                    vec![mod_entry.path()]
+                    vec![mod_path]
                 };
                 // For each folder
                 for path in install_paths {
@@ -221,7 +229,7 @@ impl Game {
             // Uninstall if necessary
             else {
                 let mod_diff = differ(&mod_path);
-                for entry in WalkDir::new(mod_entry.path()) {
+                for entry in WalkDir::new(&mod_path) {
                     let file_entry = entry?;
                     utils::remove_path(&install_dir, mod_diff(&file_entry).unwrap())?;
                 }

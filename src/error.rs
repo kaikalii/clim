@@ -18,6 +18,8 @@ pub enum Error {
     WalkDir(#[from] walkdir::Error),
     #[error("Fomod error: {0}")]
     Fomod(#[from] crate::fomod::Error),
+    #[error("No archive found for {0:?}")]
+    UnknownArchive(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
