@@ -95,6 +95,8 @@ pub struct InstalledMod {
     pub enabled: bool,
     #[serde(default = "_true", skip_serializing_if = "Clone::clone")]
     pub installed: bool,
+    #[serde(default, skip_serializing_if = "HashSet::is_empty")]
+    pub parts: HashSet<PathBuf>,
 }
 
 impl Default for InstalledMod {
@@ -102,6 +104,7 @@ impl Default for InstalledMod {
         InstalledMod {
             enabled: true,
             installed: false,
+            parts: HashSet::new(),
         }
     }
 }
@@ -220,6 +223,7 @@ impl Game {
     fn install(&mut self) -> crate::Result<()> {
         let install_dir = self.install_dir();
         for (mod_name, im, mod_path) in self.mods_ordered()? {
+            dbg!(mod_name, &im, &mod_path);
             // Install if necessary
             if im.enabled && !im.installed {
                 // Check for fomod
@@ -239,7 +243,9 @@ impl Game {
                         You can still select which sections you want to install.",
                         mod_name
                     );
-                    fomod::pseudo_fomod(&mod_path)?
+                    let paths = fomod::pseudo_fomod(&mod_path)?;
+                    im.parts = paths.iter().cloned().collect();
+                    paths
                 } else {
                     vec![mod_path]
                 };

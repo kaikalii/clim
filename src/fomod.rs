@@ -190,7 +190,7 @@ where
     }
     let mut install_paths = Vec::new();
     let mut entries: Vec<_> = fs::read_dir(path)?.filter_map(Result::ok).collect();
-    entries.sort();
+    entries.sort_by_key(|entry| entry.path());
     for entry in entries {
         if entry.file_type()?.is_dir() {
             let lowest = entry.path().iter().last().unwrap().to_owned();
