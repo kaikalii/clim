@@ -143,44 +143,53 @@ impl Game {
                     .file_names()
                     .any(|name| install_dir.join(name).exists());
                 // Install if necessary
-                if should_be_installed {
-                    if !any_installed {
-                        utils::print_erasable(&format!("Installing {:?}", mod_name));
-                        // For each file in the archive
-                        for i in 0..archive.len() {
-                            let mut zipped_file = archive.by_index(i)?;
-                            let extracted_path = extracted_dir.join(zipped_file.name());
-                            let install_path = self.install_dir().join(zipped_file.name());
-                            // Install the file if it does not exist
-                            if !install_path.exists() {
-                                utils::create_dirs(&install_path)?;
-                                // Check if the file has been extraced
-                                if extracted_path.exists() {
-                                    // Copy the extracted file if it exists
-                                    let mut extracted_file = File::open(extracted_path)?;
-                                    let mut install_file = File::create(install_path)?;
-                                    io::copy(&mut extracted_file, &mut install_file)?;
-                                } else {
-                                    // Extract from the archive if necessary
-                                    let mut file_bytes = Vec::new();
-                                    let mut install_file = File::create(install_path)?;
-                                    let mut extracted_file = File::create(extracted_path)?;
-                                    io::copy(&mut zipped_file, &mut file_bytes)?;
-                                    io::copy(&mut file_bytes.as_slice(), &mut extracted_file)?;
-                                    io::copy(&mut file_bytes.as_slice(), &mut install_file)?;
-                                }
+                if should_be_installed && !any_installed {
+                    utils::print_erasable(&format!("Installing {:?}", mod_name));
+                    // For each file in the archive
+                    for i in 0..archive.len() {
+                        let mut zipped_file = archive.by_index(i)?;
+                        let extracted_path = extracted_dir.join(zipped_file.name());
+                        let install_path = self.install_dir().join(zipped_file.name());
+                        // Install the file if it does not exist
+                        if !install_path.exists() {
+                            utils::create_dirs(&install_path)?;
+                            // Check if the file has been extraced
+                            if extracted_path.exists() {
+                                // Copy the extracted file if it exists
+                                let mut extracted_file = File::open(extracted_path)?;
+                                let mut install_file = File::create(install_path)?;
+                                io::copy(&mut extracted_file, &mut install_file)?;
+                            } else {
+                                // Extract from the archive if necessary
+                                let mut file_bytes = Vec::new();
+                                let mut install_file = File::create(install_path)?;
+                                let mut extracted_file = File::create(extracted_path)?;
+                                io::copy(&mut zipped_file, &mut file_bytes)?;
+                                io::copy(&mut file_bytes.as_slice(), &mut extracted_file)?;
+                                io::copy(&mut file_bytes.as_slice(), &mut install_file)?;
                             }
                         }
-                        println!("Installed {:?} ", mod_name);
                     }
                     self.config.enabled.insert(mod_name.clone());
+                    println!("Installed {:?} ", mod_name);
                 }
                 // Uninstall if necessary
                 if !should_be_installed && any_installed {
                     for name in archive.file_names() {
-                        utils::remove_file(&install_dir, name)?;
+                        utils::remove_path(&install_dir, name)?;
                     }
                     println!("Uninstalled {:?}", mod_name);
+                }
+                // Delete if necessary
+                if !(self.config.enabled.contains(&mod_name)
+                    || self.config.disabled.contains(&mod_name))
+                {
+                    for name in archive.file_names() {
+                        utils::remove_path(&install_dir, name)?;
+                    }
+                    utils::remove_path(extracted_dir, "")?;
+                    fs::remove_file(entry.path())?;
+                    println!("Deleted {:?}", mod_name);
                 }
             }
         }

@@ -1,6 +1,6 @@
 use std::{fs, io, path::Path};
 
-pub fn remove_file<P, Q>(top: P, name: Q) -> io::Result<()>
+pub fn remove_path<P, Q>(top: P, name: Q) -> io::Result<()>
 where
     P: AsRef<Path>,
     Q: AsRef<Path>,
