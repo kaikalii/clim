@@ -234,6 +234,11 @@ impl Game {
                     })
                     .map(DirEntry::into_path);
                 let install_paths = if config.is_some() {
+                    println!(
+                        "{:?} has a Fomod installer, but climm does not currently support it. \
+                        You can still select which sections you want to install.",
+                        mod_name
+                    );
                     fomod::pseudo_fomod(&mod_path)?
                 } else {
                     vec![mod_path]
