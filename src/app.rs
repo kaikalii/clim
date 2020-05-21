@@ -41,4 +41,11 @@ pub enum App {
     },
     #[structopt(about = "Get the name of the active game")]
     Active,
+    #[structopt(
+        about = "Watch a directory for new downloads. New downloads will be moved to the active game's downloads folder"
+    )]
+    Watch {
+        #[structopt(help = "The folder to watch. Defaults to your user downloads folder")]
+        folder: Option<PathBuf>,
+    },
 }

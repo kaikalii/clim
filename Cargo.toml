@@ -1,5 +1,6 @@
 [dependencies]
 dirs = '2.0.2'
+notify = '5.0.0-pre.2'
 open = '1.4.0'
 pathdiff = '0.2.0'
 serde = '1.0.110'

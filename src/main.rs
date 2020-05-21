@@ -6,6 +6,11 @@ mod library;
 mod utils;
 use app::*;
 
+use std::{
+    fs,
+    io::{stdin, BufRead},
+};
+
 use structopt::StructOpt;
 
 use error::{Error, Result};
@@ -60,6 +65,46 @@ fn run() -> Result<()> {
             } else {
                 println!("No active game");
             }
+        }
+        App::Watch { folder } => {
+            use notify::{
+                event::CreateKind, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
+            };
+            let path = if let Some(folder) = folder {
+                folder
+            } else {
+                dirs::download_dir().ok_or(Error::NoDownloadsDirectory)?
+            };
+            let game_downloads_dir = library::downloads_dir(&gc.active_game()?.name)?;
+            let mut watcher: RecommendedWatcher = Watcher::new_immediate(move |res| match res {
+                Ok(Event {
+                    kind: EventKind::Create(CreateKind::Any),
+                    paths,
+                    ..
+                })
+                | Ok(Event {
+                    kind: EventKind::Create(CreateKind::File),
+                    paths,
+                    ..
+                }) => {
+                    for path in paths {
+                        if path.extension().map_or(false, |ext| ext != "crdownload") {
+                            if let Err(e) = fs::rename(
+                                &path,
+                                game_downloads_dir.join(path.file_name().unwrap()),
+                            ) {
+                                println!("{}", e);
+                            } else {
+                                println!("Added mod {:?}", path.file_name().unwrap());
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            })?;
+            watcher.watch(&path, RecursiveMode::NonRecursive)?;
+            println!("Watching {:?}. Press enter to end...", path);
+            stdin().lock().lines().next().unwrap()?;
         }
     }
 

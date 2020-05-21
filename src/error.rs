@@ -8,6 +8,8 @@ pub enum Error {
     Deserialize(#[from] toml::de::Error),
     #[error("No home directory")]
     NoHomeDirectory,
+    #[error("No user downloads folder")]
+    NoDownloadsDirectory,
     #[error("Climm already manages {0}")]
     AlreadyManaged(String),
     #[error("Unknown game: {0}")]
@@ -20,6 +22,8 @@ pub enum Error {
     Fomod(#[from] crate::fomod::Error),
     #[error("No archive found for {0:?}")]
     UnknownArchive(String),
+    #[error("Notify error: {0}")]
+    Notify(#[from] notify::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
