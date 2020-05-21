@@ -9,7 +9,7 @@ use std::{
 use indexmap::IndexSet;
 use pathdiff::diff_paths;
 use serde_derive::{Deserialize, Serialize};
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 
 use crate::{
     fomod,
@@ -154,9 +154,10 @@ impl Game {
                         .status
                         .success()
                     {
+                        // Mark mod as enabled
                         self.config.enabled.insert(mod_name.clone());
                     } else {
-                        utils::remove_path(extracted_dir, "")?;
+                        utils::remove_path(&extracted_dir, "")?;
                     }
                 }
             }
@@ -181,15 +182,28 @@ impl Game {
                 .to_string_lossy()
                 .into_owned();
             // Check for fomod
-            if let Some(fomod_path) = ["fomod", "Fomod"]
-                .iter()
-                .map(|name| mod_entry.path().join(name))
-                .find(|path| path.is_dir())
-            {
-                if let (Ok(info_file), Ok(config_file)) = (
-                    File::open(fomod_path.join("info.xml")),
-                    File::open(fomod_path.join("ModuleConfig.xml")),
-                ) {
+            let info = WalkDir::new(mod_entry.path())
+                .into_iter()
+                .filter_map(Result::ok)
+                .find(|entry| {
+                    entry
+                        .path()
+                        .file_name()
+                        .map_or(false, |name| name == "info.xml")
+                })
+                .map(DirEntry::into_path);
+            let config = WalkDir::new(mod_entry.path())
+                .into_iter()
+                .filter_map(Result::ok)
+                .find(|entry| {
+                    entry
+                        .path()
+                        .file_name()
+                        .map_or(false, |name| name == "ModuleConfig.xml")
+                })
+                .map(DirEntry::into_path);
+            if let (Some(info), Some(config)) = (info, config) {
+                if let (Ok(info_file), Ok(config_file)) = (File::open(info), File::open(config)) {
                     fomod::Fomod::parse(info_file, config_file)?;
                 }
                 return Ok(());
@@ -285,7 +299,7 @@ where
         .map(|stem| stem.to_string_lossy().into_owned())
 }
 
-fn differ<P>(top: &P) -> impl Fn(&'_ walkdir::DirEntry) -> Option<PathBuf> + '_
+fn differ<P>(top: &P) -> impl Fn(&'_ DirEntry) -> Option<PathBuf> + '_
 where
     P: AsRef<Path>,
 {
