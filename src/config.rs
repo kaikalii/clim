@@ -27,8 +27,8 @@ impl GlobalConfig {
         }
     }
     pub fn save(&self) -> crate::Result<()> {
-        let bytes = toml::to_vec(self)?;
-        fs::write(library::global_config()?, &bytes).map_err(Into::into)
+        let string = toml::to_string_pretty(self)?;
+        fs::write(library::global_config()?, &string).map_err(Into::into)
     }
     pub fn init_game(
         &mut self,
@@ -89,12 +89,6 @@ pub struct Config {
     pub disabled: HashSet<String>,
 }
 
-impl Config {
-    pub fn contains(&self, name: &str) -> bool {
-        self.enabled.contains(name) || self.disabled.contains(name)
-    }
-}
-
 pub struct Game {
     name: String,
     config: Config,
@@ -126,24 +120,51 @@ impl Game {
         })
     }
     pub fn save(&self) -> crate::Result<()> {
-        let bytes = toml::to_vec(&self.config)?;
-        fs::write(self.config_file()?, &bytes).map_err(Into::into)
+        let string = toml::to_string_pretty(&self.config)?;
+        fs::write(self.config_file()?, &string).map_err(Into::into)
     }
     pub fn update(&mut self) -> crate::Result<()> {
+        // Iterate over all downloaded mods
         for entry in fs::read_dir(library::downloads_dir(&self.name)?)? {
             let entry = entry?;
+            // If the entry is a file
             if entry.file_type()?.is_file() {
+                // Get the mod name
                 let mod_name = mod_name(entry.path()).unwrap();
-                if !self.config.contains(&mod_name) {
-                    let mut archive = ZipArchive::new(File::open(entry.path())?)?;
-                    for i in 0..archive.len() {
-                        let mut zipped_file = archive.by_index(i)?;
-                        let mut dest_file =
-                            File::create(self.install_dir().join(zipped_file.name()))?;
-                        io::copy(&mut zipped_file, &mut dest_file)?;
+                // Check if the mod should be installed
+                let should_be_installed = !self.config.disabled.contains(&mod_name);
+                // Load the archive
+                let mut archive = ZipArchive::new(File::open(entry.path())?)?;
+                let install_dir = self.install_dir();
+                // Check if all files from the mod are installed
+                let is_installed = archive
+                    .file_names()
+                    .all(|name| install_dir.join(name).exists());
+                // Install if necessary
+                if should_be_installed {
+                    if !is_installed {
+                        print_erasable(&format!("Installing {:?}", mod_name));
+                        for i in 0..archive.len() {
+                            let mut zipped_file = archive.by_index(i)?;
+                            let mut dest_file =
+                                File::create(self.install_dir().join(zipped_file.name()))?;
+                            io::copy(&mut zipped_file, &mut dest_file)?;
+                        }
+                        println!("Installed {:?} ", mod_name);
                     }
                     self.config.enabled.insert(mod_name.clone());
-                    println!("Installed {:?}", mod_name);
+                }
+                // Uninstall if necessary
+                if !should_be_installed {
+                    let any_installed = archive
+                        .file_names()
+                        .any(|name| install_dir.join(name).exists());
+                    if any_installed {
+                        for name in archive.file_names() {
+                            remove_path(install_dir.join(name))?;
+                        }
+                        println!("Uninstalled {:?}", mod_name);
+                    }
                 }
             }
         }
@@ -166,4 +187,22 @@ where
     file.as_ref()
         .file_stem()
         .map(|stem| stem.to_string_lossy().into_owned())
+}
+
+fn remove_path<P>(path: P) -> io::Result<()>
+where
+    P: AsRef<Path>,
+{
+    let path = path.as_ref();
+    if path.is_file() {
+        fs::remove_file(path)?;
+    } else if path.is_dir() {
+        fs::remove_dir_all(path)?;
+    }
+    Ok(())
+}
+
+fn print_erasable(s: &str) {
+    print!("{}\r", s);
+    let _ = io::Write::flush(&mut io::stdout());
 }
