@@ -1,6 +1,7 @@
 [dependencies]
 dirs = '2.0.2'
 open = '1.4.0'
+pathdiff = '0.2.0'
 serde = '1.0.110'
 serde_derive = '1.0.110'
 structopt = '0.3.14'
@@ -8,7 +9,6 @@ thiserror = '1.0.18'
 toml = '0.5.6'
 walkdir = '2.3.1'
 xmltree = '0.10.0'
-pathdiff = "*"
 
 [dependencies.indexmap]
 features = ['serde-1']

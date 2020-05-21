@@ -48,9 +48,17 @@ fn run() -> Result<()> {
         }
         App::SetActive { name } => {
             if gc.games.contains(&name) {
+                println!("Set {:?} as active game", name);
                 gc.active_game = Some(name);
             } else {
                 return Err(Error::UnknownGame(name));
+            }
+        }
+        App::Active => {
+            if let Some(name) = &gc.active_game {
+                println!("{:?} is currently active", name);
+            } else {
+                println!("No active game");
             }
         }
     }
