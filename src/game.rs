@@ -6,7 +6,7 @@ use std::{
     process::Command,
 };
 
-use indexmap::IndexSet;
+use indexmap::IndexMap;
 use pathdiff::diff_paths;
 use serde_derive::{Deserialize, Serialize};
 use walkdir::{DirEntry, WalkDir};
@@ -52,8 +52,7 @@ impl GlobalConfig {
             config: Config {
                 data_folder: data,
                 game_folder: folder,
-                enabled: IndexSet::new(),
-                disabled: HashSet::new(),
+                mods: IndexMap::new(),
             },
         }
         .save()?;
@@ -84,15 +83,34 @@ impl Drop for GlobalConfig {
     }
 }
 
+fn _true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstalledMod {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "_true", skip_serializing_if = "Clone::clone")]
+    pub installed: bool,
+}
+
+impl Default for InstalledMod {
+    fn default() -> Self {
+        InstalledMod {
+            enabled: true,
+            installed: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub game_folder: PathBuf,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data_folder: Option<PathBuf>,
     #[serde(default)]
-    pub enabled: IndexSet<String>,
-    #[serde(default)]
-    pub disabled: HashSet<String>,
+    pub mods: IndexMap<String, InstalledMod>,
 }
 
 pub struct Game {
@@ -138,13 +156,18 @@ impl Game {
                 let mod_name = mod_name(entry.path()).unwrap();
                 // Get the extracted dir
                 let extracted_dir = library::extracted_dir(&self.name, &mod_name)?;
-                // Check if the mod should be installed
-                let should_be_installed = !self.config.disabled.contains(&mod_name);
                 // Check if any files from the mod are installed
                 let is_extracted = extracted_dir.exists();
                 let extracted_dir = extracted_dir.and_create_dirs::<crate::Error>()?;
                 // Extract if necessary
-                if should_be_installed && !is_extracted {
+                if is_extracted {
+                    // Mark mod as enabled
+                    self.config
+                        .mods
+                        .entry(mod_name.clone())
+                        .or_insert_with(Default::default)
+                        .enabled = true;
+                } else {
                     utils::print_erasable(&format!("Extracting {:?}", mod_name));
                     if Command::new("7z")
                         .arg("x")
@@ -155,7 +178,11 @@ impl Game {
                         .success()
                     {
                         // Mark mod as enabled
-                        self.config.enabled.insert(mod_name.clone());
+                        self.config
+                            .mods
+                            .entry(mod_name.clone())
+                            .or_insert_with(Default::default)
+                            .enabled = true;
                     } else {
                         utils::remove_path(&extracted_dir, "")?;
                     }
@@ -166,8 +193,8 @@ impl Game {
     }
     fn install(&mut self) -> crate::Result<()> {
         let install_dir = self.install_dir();
-        for enabled in &self.config.enabled {
-            let enabled_lower = enabled.to_lowercase();
+        for (mod_name, im) in self.config.mods.iter_mut() {
+            let name_lower = mod_name.to_lowercase();
             let mod_path = fs::read_dir(library::extracted_dir(&self.name, "")?)?
                 .filter_map(Result::ok)
                 .find(|entry| {
@@ -176,22 +203,13 @@ impl Game {
                             .path()
                             .to_string_lossy()
                             .to_lowercase()
-                            .contains(&enabled_lower)
+                            .contains(&name_lower)
                 })
                 .map(|entry| entry.path())
-                .ok_or_else(|| crate::Error::UnknownArchive(enabled.clone()))?;
-            // Get the mod name
-            let mod_name = mod_path
-                .iter()
-                .last()
-                .expect("dir entry has empty path")
-                .to_string_lossy()
-                .into_owned();
-            // Check if the mod should be installed
-            let should_be_installed = !self.config.disabled.contains(&mod_name);
+                .ok_or_else(|| crate::Error::UnknownArchive(mod_name.clone()))?;
 
             // Install if necessary
-            if should_be_installed {
+            if im.enabled && !im.installed {
                 // Check for fomod
                 let config = WalkDir::new(&mod_path)
                     .into_iter()
@@ -224,15 +242,17 @@ impl Game {
                         }
                     }
                 }
+                im.installed = true;
                 println!("Installed {:?} ", mod_name);
             }
             // Uninstall if necessary
-            else {
+            else if !im.enabled && im.installed {
                 let mod_diff = differ(&mod_path);
                 for entry in WalkDir::new(&mod_path) {
                     let file_entry = entry?;
                     utils::remove_path(&install_dir, mod_diff(&file_entry).unwrap())?;
                 }
+                im.installed = false;
                 println!("Uninstalled {:?}", mod_name);
             }
         }
@@ -256,9 +276,7 @@ impl Game {
                 let extracted_dir = library::extracted_dir(&self.name, &mod_name)?;
                 let mod_diff = differ(&extracted_dir);
                 // Delete if necessary
-                if !(self.config.enabled.contains(&mod_name)
-                    || self.config.disabled.contains(&mod_name))
-                {
+                if !self.config.mods.contains_key(&mod_name) {
                     for entry in WalkDir::new(&extracted_dir) {
                         let file_entry = entry?;
                         utils::remove_path(&install_dir, mod_diff(&file_entry).unwrap())?;
