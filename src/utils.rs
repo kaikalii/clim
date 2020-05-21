@@ -11,8 +11,6 @@ where
     let path = top.join(name);
     if path.is_file() {
         fs::remove_file(path)?;
-    } else if path.is_dir() {
-        fs::remove_dir_all(path)?;
     }
     // Delete empty folders
     while let Some(parent) = name.parent() {

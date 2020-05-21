@@ -46,7 +46,7 @@ impl GlobalConfig {
         if self.games.contains(&name) {
             return Err(crate::Error::AlreadyManaged(name));
         }
-        self.active_game.get_or_insert_with(|| name.clone());
+        self.active_game = Some(name.clone());
         self.games.insert(name.clone());
         Game {
             name: name.clone(),
