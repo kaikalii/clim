@@ -12,4 +12,8 @@ pub enum App {
     },
     Update,
     Clean,
+    Edit {
+        #[structopt(long, short)]
+        global: bool,
+    },
 }

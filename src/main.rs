@@ -30,13 +30,14 @@ fn run() -> Result<()> {
         } => {
             gc.init_game(name, game_folder, data)?;
         }
-        App::Update => {
-            let mut game = gc.active_game()?;
-            game.update()?;
-        }
-        App::Clean => {
-            let mut game = gc.active_game()?;
-            game.clean()?;
+        App::Update => gc.active_game()?.update()?,
+        App::Clean => gc.active_game()?.clean()?,
+        App::Edit { global } => {
+            open::that(if global {
+                library::global_config()?
+            } else {
+                gc.active_game()?.config_file()?
+            })?;
         }
     }
 
