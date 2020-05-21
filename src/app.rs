@@ -11,4 +11,5 @@ pub enum App {
         data: Option<PathBuf>,
     },
     Update,
+    Clean,
 }

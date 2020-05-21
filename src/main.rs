@@ -34,6 +34,10 @@ fn run() -> Result<()> {
             let mut game = gc.active_game()?;
             game.update()?;
         }
+        App::Clean => {
+            let mut game = gc.active_game()?;
+            game.clean()?;
+        }
     }
 
     Ok(())

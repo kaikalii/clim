@@ -169,17 +169,6 @@ impl Game {
                     }
                     println!("Uninstalled {:?}", mod_name);
                 }
-                // Delete if necessary
-                if !(self.config.enabled.contains(&mod_name)
-                    || self.config.disabled.contains(&mod_name))
-                {
-                    for name in archive.file_names() {
-                        utils::remove_path(&install_dir, name)?;
-                    }
-                    utils::remove_path(extracted_dir, "")?;
-                    fs::remove_file(entry.path())?;
-                    println!("Deleted {:?}", mod_name);
-                }
             }
         }
         // Install mods
@@ -219,6 +208,34 @@ impl Game {
                         }
                     }
                     println!("Installed {:?} ", mod_name);
+                }
+            }
+        }
+        Ok(())
+    }
+    pub fn clean(&mut self) -> crate::Result<()> {
+        let install_dir = self.install_dir();
+        // Extract downloads
+        for entry in fs::read_dir(library::downloads_dir(&self.name)?)? {
+            let entry = entry?;
+            // If the entry is a file
+            if entry.file_type()?.is_file() {
+                // Get the mod name
+                let mod_name = mod_name(entry.path()).unwrap();
+                // Get the extracted dir
+                let extracted_dir = library::extracted_dir(&self.name, &mod_name)?;
+                // Load the archive
+                let archive = ZipArchive::new(File::open(entry.path())?)?;
+                // Delete if necessary
+                if !(self.config.enabled.contains(&mod_name)
+                    || self.config.disabled.contains(&mod_name))
+                {
+                    for name in archive.file_names() {
+                        utils::remove_path(&install_dir, name)?;
+                    }
+                    utils::remove_path(extracted_dir, "")?;
+                    fs::remove_file(entry.path())?;
+                    println!("Deleted {:?}", mod_name);
                 }
             }
         }
