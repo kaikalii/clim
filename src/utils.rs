@@ -7,6 +7,14 @@ macro_rules! colorln {
     };
 }
 
+#[macro_export]
+macro_rules! waitln {
+    ($format:literal $(, $item:expr)* $(,)?) => {
+        print!($format, $($item),*);
+        let _ = std::io::Write::flush(&mut std::io::stdout());
+    }
+}
+
 pub fn remove_path<P, Q>(top: P, name: Q) -> io::Result<()>
 where
     P: AsRef<Path>,
@@ -30,15 +38,6 @@ where
         name = parent;
     }
     Ok(())
-}
-
-pub fn print_erasable(s: &str) {
-    print!(
-        "{}    \r{}",
-        s,
-        if cfg!(debug_assertions) { "\n" } else { "" }
-    );
-    let _ = io::Write::flush(&mut io::stdout());
 }
 
 pub fn create_dirs<P>(path: P) -> io::Result<()>

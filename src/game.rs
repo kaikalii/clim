@@ -13,9 +13,9 @@ use walkdir::{DirEntry, WalkDir};
 
 use crate::{
     app::MoveSubcommand,
-    fomod,
+    colorln, fomod,
     library::{self},
-    utils,
+    utils, waitln,
 };
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -224,14 +224,14 @@ impl Game {
     fn extract_mod(game_name: &str, mod_name: &str, mm: &mut ManagedMod) -> crate::Result<()> {
         if mm.enabled && mm.extracted.is_none() {
             let extracted_dir = library::extracted_dir(game_name, mod_name)?;
-            utils::print_erasable(&format!("Extracting {:?}...", mod_name));
+            waitln!("Extracting {:?}...", mod_name);
             Command::new("7z")
                 .arg("x")
                 .arg(&mm.archive)
                 .arg(format!("-o{}", extracted_dir.to_string_lossy()))
                 .output()?;
             mm.extracted = Some(extracted_dir);
-            println!("Extracted {:?} ", mod_name);
+            colorln!(green, "done");
         }
         Ok(())
     }
@@ -335,11 +335,11 @@ impl Game {
     }
     pub fn deploy(&mut self) -> crate::Result<()> {
         self.extract()?;
-        utils::print_erasable("Deploying...");
+        waitln!("Deploying...");
         self.uninstall()?;
         self.install()?;
         self.write_plugins()?;
-        println!("Deployed    ");
+        colorln!(green, "done");
         Ok(())
     }
     pub fn move_mod(&mut self, moved: String, to: MoveSubcommand) -> crate::Result<()> {
