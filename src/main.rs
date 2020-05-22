@@ -6,10 +6,7 @@ mod library;
 mod utils;
 use app::*;
 
-use std::{
-    fs,
-    io::{stdin, BufRead},
-};
+use std::io::{stdin, BufRead};
 
 use structopt::StructOpt;
 
@@ -33,23 +30,27 @@ fn run() -> Result<()> {
             name,
             game_folder,
             data,
+            plugins,
         } => {
-            gc.init_game(name, game_folder, data, None)?;
+            gc.init_game(name, game_folder, data, plugins)?;
         }
-        App::Update => gc.active_game()?.update()?,
-        App::Clean => gc.active_game()?.clean()?,
-        App::Edit { global } => {
-            open::that(if global {
-                library::global_config()?
-            } else {
-                gc.active_game()?.config_file()?
-            })?;
+        App::Go => gc.active_game()?.deploy()?,
+        App::Add { archives, r#move } => gc.active_game()?.add(&archives, r#move)?,
+        App::Enable { names } => {
+            let mut game = gc.active_game()?;
+            for name in names {
+                let (mod_name, mm) = game.get_mod(&name)?;
+                mm.enabled = true;
+                println!("Enabled {}", mod_name);
+            }
         }
-        App::Downloads => {
-            open::that(library::downloads_dir(&gc.active_game()?.name)?)?;
-        }
-        App::GameFolder => {
-            open::that(&gc.active_game()?.config.game_folder)?;
+        App::Disable { names } => {
+            let mut game = gc.active_game()?;
+            for name in names {
+                let (mod_name, mm) = game.get_mod(&name)?;
+                mm.enabled = false;
+                println!("Disabled {}", mod_name);
+            }
         }
         App::SetActive { name } => {
             if gc.games.contains(&name) {
@@ -66,6 +67,12 @@ fn run() -> Result<()> {
                 println!("No active game");
             }
         }
+        App::Downloads => {
+            open::that(library::downloads_dir(&gc.active_game()?.name)?)?;
+        }
+        App::GameFolder => {
+            open::that(&gc.active_game()?.config.game_folder)?;
+        }
         App::Watch { folder } => {
             use notify::{
                 event::CreateKind, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
@@ -75,7 +82,6 @@ fn run() -> Result<()> {
             } else {
                 dirs::download_dir().ok_or(Error::NoDownloadsDirectory)?
             };
-            let game_downloads_dir = library::downloads_dir(&gc.active_game()?.name)?;
             let mut watcher: RecommendedWatcher = Watcher::new_immediate(move |res| match res {
                 Ok(Event {
                     kind: EventKind::Create(CreateKind::Any),
@@ -89,13 +95,11 @@ fn run() -> Result<()> {
                 }) => {
                     for path in paths {
                         if path.extension().map_or(false, |ext| ext != "crdownload") {
-                            if let Err(e) = fs::rename(
-                                &path,
-                                game_downloads_dir.join(path.file_name().unwrap()),
-                            ) {
+                            if let Err(e) = gc
+                                .active_game()
+                                .and_then(|mut game| game.add(&[path], true))
+                            {
                                 println!("{}", e);
-                            } else {
-                                println!("Added mod {:?}", path.file_name().unwrap());
                             }
                         }
                     }

@@ -14,33 +14,29 @@ pub enum App {
         #[structopt(
             long,
             short,
-            help = "The game's data folder, where mods should be placed, if it has one"
+            help = "The path to the game's data folder, if it has one, relative to the game folder"
         )]
         data: Option<PathBuf>,
+        #[structopt(
+            long,
+            short,
+            help = "The path to the game's master plugins file, if it has one"
+        )]
+        plugins: Option<PathBuf>,
     },
-    #[structopt(about = "Install and uninstall mods as defined by the active game's climm file")]
-    Update,
-    #[structopt(
-        alias = "u",
-        about = "Completely delete mods that are no longer present in the active game's climm file"
-    )]
-    Clean,
-    #[structopt(about = "Edit the active game's climm fifle")]
-    Edit {
-        #[structopt(long, short, help = "Edit the global climm settings instead")]
-        global: bool,
+    #[structopt(alias = "deploy", about = "Deploy mods")]
+    Go,
+    #[structopt(about = "Add mod archives to the active game")]
+    Add {
+        #[structopt(help = "Paths to the archive files")]
+        archives: Vec<PathBuf>,
+        #[structopt(
+            long,
+            short,
+            help = "Whether to move the files instead of copying them"
+        )]
+        r#move: bool,
     },
-    #[structopt(about = "Open the active game's downloads folder")]
-    Downloads,
-    #[structopt(about = "Open the active game's main folder")]
-    GameFolder,
-    #[structopt(about = "Set the active game")]
-    SetActive {
-        #[structopt(help = "The name of the game")]
-        name: String,
-    },
-    #[structopt(about = "Get the name of the active game")]
-    Active,
     #[structopt(
         about = "Watch a directory for new downloads. New downloads will be moved to the active game's downloads folder"
     )]
@@ -48,4 +44,25 @@ pub enum App {
         #[structopt(help = "The folder to watch. Defaults to your user downloads folder")]
         folder: Option<PathBuf>,
     },
+    #[structopt(about = "Enable mods")]
+    Enable {
+        #[structopt(help = "The names of the mods to enable. They do not need to be exact.")]
+        names: Vec<String>,
+    },
+    #[structopt(about = "Disable mods")]
+    Disable {
+        #[structopt(help = "The names of the mods to disable. They do not need to be exact.")]
+        names: Vec<String>,
+    },
+    #[structopt(about = "Set the active game")]
+    SetActive {
+        #[structopt(help = "The name of the game")]
+        name: String,
+    },
+    #[structopt(about = "Get the name of the active game")]
+    Active,
+    #[structopt(about = "Open the active game's downloads folder")]
+    Downloads,
+    #[structopt(about = "Open the active game's main folder")]
+    GameFolder,
 }

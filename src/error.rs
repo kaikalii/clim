@@ -20,8 +20,8 @@ pub enum Error {
     WalkDir(#[from] walkdir::Error),
     #[error("Fomod error: {0}")]
     Fomod(#[from] crate::fomod::Error),
-    #[error("No archive found for {0:?}")]
-    UnknownArchive(String),
+    #[error("No mod found for {0:?}")]
+    UnknownMod(String),
     #[error("Notify error: {0}")]
     Notify(#[from] notify::Error),
 }

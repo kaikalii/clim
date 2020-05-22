@@ -6,14 +6,14 @@ use std::{
     process::Command,
 };
 
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
 use pathdiff::diff_paths;
 use serde_derive::{Deserialize, Serialize};
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
     fomod,
-    library::{self, AndCreateDirs},
+    library::{self},
     utils,
 };
 
@@ -90,28 +90,36 @@ fn _true() -> bool {
     true
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InstalledMod {
-    #[serde(default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ManagedMod {
     pub enabled: bool,
-    #[serde(default = "_true", skip_serializing_if = "Clone::clone")]
-    pub installed: bool,
-    #[serde(default, skip_serializing_if = "IndexSet::is_empty")]
-    pub parts: IndexSet<PathBuf>,
+    pub extracted: Option<PathBuf>,
+    pub archive: PathBuf,
+    pub parts: Vec<PathBuf>,
 }
 
-impl Default for InstalledMod {
-    fn default() -> Self {
-        InstalledMod {
-            enabled: true,
-            installed: false,
-            parts: IndexSet::new(),
+impl ManagedMod {
+    pub fn new(archive: PathBuf) -> Self {
+        ManagedMod {
+            archive,
+            ..Self::default()
+        }
+    }
+    pub fn part_paths(&self) -> Vec<PathBuf> {
+        if self.parts.is_empty() {
+            if let Some(extr) = &self.extracted {
+                vec![extr.clone()]
+            } else {
+                Vec::new()
+            }
+        } else {
+            self.parts.clone()
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename = "snake_case")]
 pub enum DeploymentMethod {
     Hardlink,
     Symlink,
@@ -123,17 +131,14 @@ impl Default for DeploymentMethod {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Config {
     pub game_folder: PathBuf,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data_folder: Option<PathBuf>,
-    #[serde(default)]
-    pub deployment: DeploymentMethod,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plugins_file: Option<PathBuf>,
-    #[serde(default)]
-    pub mods: IndexMap<String, InstalledMod>,
+    pub deployment: DeploymentMethod,
+    pub mods: IndexMap<String, ManagedMod>,
 }
 
 pub struct Game {
@@ -170,81 +175,71 @@ impl Game {
         let string = toml::to_string_pretty(&self.config)?;
         fs::write(self.config_file()?, &string).map_err(Into::into)
     }
-    fn extract(&mut self) -> crate::Result<()> {
-        for entry in fs::read_dir(library::downloads_dir(&self.name)?)? {
-            let entry = entry?;
-            // If the entry is a file
-            if entry.file_type()?.is_file() {
-                // Get the mod name
-                let mod_name = mod_name(entry.path()).unwrap();
-                // Get the extracted dir
-                let extracted_dir = library::extracted_dir(&self.name, &mod_name)?;
-                // Check if any files from the mod are installed
-                let is_extracted = extracted_dir.exists();
-                let extracted_dir = extracted_dir.and_create_dirs::<crate::Error>()?;
-                // Extract if necessary
-                if is_extracted {
-                    // Mark mod as enabled
-                    self.config
-                        .mods
-                        .entry(mod_name.clone())
-                        .or_insert_with(Default::default);
+    pub fn get_mod(&mut self, name: &str) -> crate::Result<(&str, &mut ManagedMod)> {
+        let name = name.to_lowercase();
+        self.config
+            .mods
+            .iter_mut()
+            .find(|(mod_name, _)| mod_name.to_lowercase().contains(&name))
+            .map(|(mod_name, mm)| (mod_name.as_str(), mm))
+            .ok_or(crate::Error::UnknownMod(name))
+    }
+    pub fn add(&mut self, paths: &[PathBuf], mv: bool) -> crate::Result<()> {
+        for path in paths {
+            if let Some(file_name) = path.file_name() {
+                let download_copy = library::downloads_dir(&self.name)?.join(file_name);
+                if mv {
+                    fs::rename(path, &download_copy)?;
                 } else {
-                    utils::print_erasable(&format!("Extracting {:?}", mod_name));
-                    if Command::new("7z")
-                        .arg("x")
-                        .arg(entry.path())
-                        .arg(format!("-o{}", extracted_dir.to_string_lossy()))
-                        .output()?
-                        .status
-                        .success()
-                    {
-                        // Mark mod as enabled
-                        self.config
-                            .mods
-                            .entry(mod_name.clone())
-                            .or_insert_with(Default::default)
-                            .enabled = true;
-                    } else {
-                        utils::remove_path(&extracted_dir, "")?;
-                    }
+                    fs::copy(path, &download_copy)?;
+                }
+                let mod_name = path.file_stem().unwrap().to_string_lossy().into_owned();
+                self.config
+                    .mods
+                    .insert(mod_name.clone(), ManagedMod::new(download_copy));
+                println!("Added {:?}", mod_name);
+            }
+        }
+        Ok(())
+    }
+    fn extract(&mut self) -> crate::Result<()> {
+        for (mod_name, mm) in &mut self.config.mods {
+            if mm.enabled && mm.extracted.is_none() {
+                let extracted_dir = library::extracted_dir(&self.name, mod_name)?;
+                utils::print_erasable(&format!("Extracting {:?}...", mod_name));
+                if Command::new("7z")
+                    .arg("x")
+                    .arg(&mm.archive)
+                    .arg(format!("-o{}", extracted_dir.to_string_lossy()))
+                    .output()?
+                    .status
+                    .success()
+                {
+                    mm.extracted = Some(extracted_dir);
+                    println!("Extracted {:?} ", mod_name);
                 }
             }
         }
         Ok(())
     }
-    fn mods_ordered(&mut self) -> crate::Result<Vec<(&str, &mut InstalledMod, PathBuf)>> {
-        let name = &self.name;
-        self.config
-            .mods
-            .iter_mut()
-            .map(|(mod_name, im)| {
-                let name_lower = mod_name.to_lowercase();
-                let mod_path = fs::read_dir(library::extracted_dir(name, "")?)?
-                    .filter_map(Result::ok)
-                    .find(|entry| {
-                        entry.path().is_dir()
-                            && entry
-                                .path()
-                                .to_string_lossy()
-                                .to_lowercase()
-                                .contains(&name_lower)
-                    })
-                    .map(|entry| entry.path())
-                    .ok_or_else(|| crate::Error::UnknownArchive(mod_name.clone()))?;
-                Ok((mod_name.as_str(), im, mod_path))
-            })
-            .collect()
+    fn uninstall(&mut self) -> crate::Result<()> {
+        let install_dir = self.install_dir();
+        for (_, mm) in &mut self.config.mods {
+            if let Some(extracted_dir) = &mm.extracted {
+                let extraced_diff = differ(&extracted_dir);
+                for entry in WalkDir::new(&extracted_dir) {
+                    let file_entry = entry?;
+                    utils::remove_path(&install_dir, extraced_diff(&file_entry.path()).unwrap())?;
+                }
+            }
+        }
+        Ok(())
     }
     fn install(&mut self) -> crate::Result<()> {
         let install_dir = self.install_dir();
-        let deployment = self.config.deployment;
-        for (mod_name, im, mod_path) in self.mods_ordered()? {
-            let mod_diff = differ(&mod_path);
-            // Install if necessary
-            if im.enabled && !im.installed {
-                // Check for fomod
-                let config = WalkDir::new(&mod_path)
+        for (mod_name, mm) in &mut self.config.mods {
+            if let (Some(extracted_dir), true) = (&mm.extracted, mm.enabled) {
+                let config = WalkDir::new(&extracted_dir)
                     .into_iter()
                     .filter_map(Result::ok)
                     .find(|entry| {
@@ -254,20 +249,19 @@ impl Game {
                             .map_or(false, |name| name == "ModuleConfig.xml")
                     })
                     .map(DirEntry::into_path);
-                let install_folders = if config.is_some() {
+                let install_folders = if !mm.parts.is_empty() {
+                    mm.parts.clone()
+                } else if config.is_some() {
                     println!(
                         "{:?} has a Fomod installer, but climm does not currently support it. \
                         You can still select which sections you want to install.",
                         mod_name
                     );
-                    let paths = fomod::pseudo_fomod(&mod_path)?;
-                    im.parts = paths
-                        .iter()
-                        .map(|part_path| mod_diff(part_path).unwrap())
-                        .collect();
+                    let paths = fomod::pseudo_fomod(&extracted_dir)?;
+                    mm.parts = paths.clone();
                     paths
                 } else {
-                    vec![mod_path.clone()]
+                    vec![extracted_dir.clone()]
                 };
                 // For each folder
                 for folder in install_folders {
@@ -282,7 +276,7 @@ impl Game {
                                 install_dir.join(folder_diff(&file_entry.path()).unwrap());
                             utils::create_dirs(&install_path)?;
                             // Deploy
-                            match deployment {
+                            match self.config.deployment {
                                 DeploymentMethod::Hardlink => {
                                     fs::hard_link(extracted_path, install_path)?
                                 }
@@ -296,37 +290,17 @@ impl Game {
                         }
                     }
                 }
-                im.installed = true;
-                println!("Installed {:?} ", mod_name);
-            }
-            // Uninstall if necessary
-            else if !im.enabled && im.installed {
-                for entry in WalkDir::new(&mod_path) {
-                    let file_entry = entry?;
-                    utils::remove_path(&install_dir, mod_diff(&file_entry.path()).unwrap())?;
-                }
-                im.installed = false;
-                println!("Uninstalled {:?}", mod_name);
             }
         }
         Ok(())
     }
     pub fn write_plugins(&mut self) -> crate::Result<()> {
-        if let Some(plugins) = self.config.plugins_file.clone() {
-            let mods_ordered = self.mods_ordered()?;
+        if let Some(plugins) = &self.config.plugins_file {
             let mut file = File::create(plugins)?;
-            for (_, im, path) in mods_ordered {
-                if im.enabled {
-                    let install_folders = if im.parts.is_empty() {
-                        vec![path]
-                    } else {
-                        im.parts
-                            .iter()
-                            .map(|part_path| path.join(part_path))
-                            .collect()
-                    };
-                    for folder in install_folders {
-                        for entry in WalkDir::new(folder).into_iter().filter_map(Result::ok) {
+            for (_, mm) in &self.config.mods {
+                if mm.enabled {
+                    for path in mm.part_paths() {
+                        for entry in WalkDir::new(path).into_iter().filter_map(Result::ok) {
                             if let Some(ext) = entry.path().extension() {
                                 if ["esp", "esm", "esl"].contains(&ext.to_string_lossy().as_ref()) {
                                     writeln!(
@@ -340,40 +314,16 @@ impl Game {
                     }
                 }
             }
-            println!("Wrote plugins")
         }
         Ok(())
     }
-    pub fn update(&mut self) -> crate::Result<()> {
+    pub fn deploy(&mut self) -> crate::Result<()> {
         self.extract()?;
+        utils::print_erasable("Deploying...");
+        self.uninstall()?;
         self.install()?;
         self.write_plugins()?;
-        Ok(())
-    }
-    pub fn clean(&mut self) -> crate::Result<()> {
-        let install_dir = self.install_dir();
-        // Extract downloads
-        for entry in fs::read_dir(library::downloads_dir(&self.name)?)? {
-            let entry = entry?;
-            // If the entry is a file
-            if entry.file_type()?.is_file() {
-                // Get the mod name
-                let mod_name = mod_name(entry.path()).unwrap();
-                // Get the extracted dir
-                let extracted_dir = library::extracted_dir(&self.name, &mod_name)?;
-                let mod_diff = differ(&extracted_dir);
-                // Delete if necessary
-                if !self.config.mods.contains_key(&mod_name) {
-                    for entry in WalkDir::new(&extracted_dir) {
-                        let file_entry = entry?;
-                        utils::remove_path(&install_dir, mod_diff(&file_entry.path()).unwrap())?;
-                    }
-                    utils::remove_path(&extracted_dir, "")?;
-                    fs::remove_file(entry.path())?;
-                    println!("Deleted {:?}", mod_name);
-                }
-            }
-        }
+        println!("Deployed");
         Ok(())
     }
 }
@@ -384,15 +334,6 @@ impl Drop for Game {
             println!("Error saving config: {}", e);
         }
     }
-}
-
-fn mod_name<P>(file: P) -> Option<String>
-where
-    P: AsRef<Path>,
-{
-    file.as_ref()
-        .file_stem()
-        .map(|stem| stem.to_string_lossy().into_owned())
 }
 
 fn differ<P>(top: &P) -> impl Fn(&'_ Path) -> Option<PathBuf> + '_
