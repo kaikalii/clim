@@ -54,6 +54,10 @@ pub enum App {
         #[structopt(help = "The names of the mods to disable. They do not need to be exact.")]
         names: Vec<String>,
     },
+    #[structopt(about = "List all mods")]
+    Mods,
+    #[structopt(about = "List all enabled plugs")]
+    Plugins,
     #[structopt(about = "Set the active game")]
     SetActive {
         #[structopt(help = "The name of the game")]

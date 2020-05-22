@@ -294,25 +294,28 @@ impl Game {
         }
         Ok(())
     }
-    pub fn write_plugins(&mut self) -> crate::Result<()> {
+    pub fn plugins(&self) -> impl Iterator<Item = PathBuf> + '_ {
+        self.config
+            .mods
+            .values()
+            .filter(|mm| mm.enabled)
+            .flat_map(|mm| mm.part_paths())
+            .flat_map(|path| WalkDir::new(path).into_iter().filter_map(Result::ok))
+            .filter_map(|entry| {
+                entry.path().extension().and_then(|ext| {
+                    if ["esp", "esm", "esl"].contains(&ext.to_string_lossy().as_ref()) {
+                        Some(entry.path().file_name().unwrap().into())
+                    } else {
+                        None
+                    }
+                })
+            })
+    }
+    pub fn write_plugins(&self) -> crate::Result<()> {
         if let Some(plugins) = &self.config.plugins_file {
             let mut file = File::create(plugins)?;
-            for (_, mm) in &self.config.mods {
-                if mm.enabled {
-                    for path in mm.part_paths() {
-                        for entry in WalkDir::new(path).into_iter().filter_map(Result::ok) {
-                            if let Some(ext) = entry.path().extension() {
-                                if ["esp", "esm", "esl"].contains(&ext.to_string_lossy().as_ref()) {
-                                    writeln!(
-                                        file,
-                                        "*{}",
-                                        entry.path().file_name().unwrap().to_string_lossy()
-                                    )?;
-                                }
-                            }
-                        }
-                    }
-                }
+            for plugin in self.plugins() {
+                writeln!(file, "*{}", plugin.to_string_lossy())?;
             }
         }
         Ok(())

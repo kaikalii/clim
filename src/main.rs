@@ -1,9 +1,10 @@
+mod utils;
+
 mod app;
 mod error;
 mod fomod;
 mod game;
 mod library;
-mod utils;
 use app::*;
 
 use std::io::{stdin, BufRead};
@@ -50,6 +51,20 @@ fn run() -> Result<()> {
                 let (mod_name, mm) = game.get_mod(&name)?;
                 mm.enabled = false;
                 println!("Disabled {}", mod_name);
+            }
+        }
+        App::Mods => {
+            for (mod_name, mm) in &gc.active_game()?.config.mods {
+                if mm.enabled {
+                    colorln!(bright_white, "{}", mod_name);
+                } else {
+                    colorln!(white, "{}", mod_name);
+                }
+            }
+        }
+        App::Plugins => {
+            for plugin in gc.active_game()?.plugins() {
+                println!("{}", plugin.to_string_lossy());
             }
         }
         App::SetActive { name } => {

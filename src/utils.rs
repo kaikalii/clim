@@ -1,5 +1,12 @@
 use std::{fs, io, path::Path};
 
+#[macro_export]
+macro_rules! colorln {
+    ($color:ident, $format:literal $(, $item:expr)* $(,)? ) => {
+        println!("{}", colored::Colorize::$color(format!($format, $($item),*).as_str()))
+    };
+}
+
 pub fn remove_path<P, Q>(top: P, name: Q) -> io::Result<()>
 where
     P: AsRef<Path>,
