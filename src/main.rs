@@ -40,9 +40,7 @@ fn run() -> Result<()> {
         App::Enable { names } => {
             let mut game = gc.active_game()?;
             for name in names {
-                let (mod_name, mm) = game.get_mod(&name)?;
-                mm.enabled = true;
-                println!("Enabled {}", mod_name);
+                game.enable(&name)?;
             }
         }
         App::Disable { names } => {
@@ -56,9 +54,9 @@ fn run() -> Result<()> {
         App::Mods => {
             for (mod_name, mm) in &gc.active_game()?.config.mods {
                 if mm.enabled {
-                    colorln!(bright_white, "{}", mod_name);
+                    colorln!(normal, "{}", mod_name);
                 } else {
-                    colorln!(white, "{}", mod_name);
+                    colorln!(dimmed, "{}", mod_name);
                 }
             }
         }
@@ -67,6 +65,7 @@ fn run() -> Result<()> {
                 println!("{}", plugin.to_string_lossy());
             }
         }
+        App::Move { name, sub } => gc.active_game()?.move_mod(name, sub)?,
         App::SetActive { name } => {
             if gc.games.contains(&name) {
                 println!("Set {:?} as active game", name);

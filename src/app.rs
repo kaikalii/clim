@@ -38,7 +38,7 @@ pub enum App {
         r#move: bool,
     },
     #[structopt(
-        about = "Watch a directory for new downloads. New downloads will be moved to the active game's downloads folder"
+        about = "Watch a directory for new downloads. \nNew downloads will be moved to the active game's downloads folder."
     )]
     Watch {
         #[structopt(help = "The folder to watch. Defaults to your user downloads folder")]
@@ -58,6 +58,13 @@ pub enum App {
     Mods,
     #[structopt(about = "List all enabled plugs")]
     Plugins,
+    #[structopt(about = "Move a mod in the load order")]
+    Move {
+        #[structopt(help = "The name of the mod to move")]
+        name: String,
+        #[structopt(subcommand)]
+        sub: MoveSubcommand,
+    },
     #[structopt(about = "Set the active game")]
     SetActive {
         #[structopt(help = "The name of the game")]
@@ -69,4 +76,16 @@ pub enum App {
     Downloads,
     #[structopt(about = "Open the active game's main folder")]
     GameFolder,
+}
+
+#[derive(Debug, StructOpt)]
+pub enum MoveSubcommand {
+    #[structopt(about = "Move above another mod")]
+    Above { name: String },
+    #[structopt(about = "Move below another mod")]
+    Below { name: String },
+    #[structopt(about = "Move to the top")]
+    Top,
+    #[structopt(about = "Move to the bottom")]
+    Bottom,
 }

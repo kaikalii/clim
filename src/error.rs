@@ -24,6 +24,8 @@ pub enum Error {
     UnknownMod(String),
     #[error("Notify error: {0}")]
     Notify(#[from] notify::Error),
+    #[error("Cannot move {0} in relation to itself")]
+    SelfRelativeMove(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

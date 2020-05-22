@@ -12,6 +12,7 @@ use serde_derive::{Deserialize, Serialize};
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
+    app::MoveSubcommand,
     fomod,
     library::{self},
     utils,
@@ -141,6 +142,17 @@ pub struct Config {
     pub mods: IndexMap<String, ManagedMod>,
 }
 
+impl Config {
+    pub fn get_mod(&mut self, name: &str) -> crate::Result<(&str, &mut ManagedMod)> {
+        let name = name.to_lowercase();
+        self.mods
+            .iter_mut()
+            .find(|(mod_name, _)| mod_name.to_lowercase().contains(&name))
+            .map(|(mod_name, mm)| (mod_name.as_str(), mm))
+            .ok_or(crate::Error::UnknownMod(name))
+    }
+}
+
 pub struct Game {
     pub name: String,
     pub config: Config,
@@ -176,13 +188,7 @@ impl Game {
         fs::write(self.config_file()?, &string).map_err(Into::into)
     }
     pub fn get_mod(&mut self, name: &str) -> crate::Result<(&str, &mut ManagedMod)> {
-        let name = name.to_lowercase();
-        self.config
-            .mods
-            .iter_mut()
-            .find(|(mod_name, _)| mod_name.to_lowercase().contains(&name))
-            .map(|(mod_name, mm)| (mod_name.as_str(), mm))
-            .ok_or(crate::Error::UnknownMod(name))
+        self.config.get_mod(name)
     }
     pub fn add(&mut self, paths: &[PathBuf], mv: bool) -> crate::Result<()> {
         for path in paths {
@@ -202,22 +208,33 @@ impl Game {
         }
         Ok(())
     }
+    pub fn enable(&mut self, name: &str) -> crate::Result<()> {
+        let (mod_name, mm) = self.config.get_mod(name)?;
+        Game::extract_mod(&self.name, mod_name, mm)?;
+        mm.enabled = true;
+        println!("Enabled {}", mod_name);
+        Ok(())
+    }
     fn extract(&mut self) -> crate::Result<()> {
         for (mod_name, mm) in &mut self.config.mods {
-            if mm.enabled && mm.extracted.is_none() {
-                let extracted_dir = library::extracted_dir(&self.name, mod_name)?;
-                utils::print_erasable(&format!("Extracting {:?}...", mod_name));
-                if Command::new("7z")
-                    .arg("x")
-                    .arg(&mm.archive)
-                    .arg(format!("-o{}", extracted_dir.to_string_lossy()))
-                    .output()?
-                    .status
-                    .success()
-                {
-                    mm.extracted = Some(extracted_dir);
-                    println!("Extracted {:?} ", mod_name);
-                }
+            Game::extract_mod(&self.name, mod_name, mm)?;
+        }
+        Ok(())
+    }
+    fn extract_mod(game_name: &str, mod_name: &str, mm: &mut ManagedMod) -> crate::Result<()> {
+        if mm.enabled && mm.extracted.is_none() {
+            let extracted_dir = library::extracted_dir(game_name, mod_name)?;
+            utils::print_erasable(&format!("Extracting {:?}...", mod_name));
+            if Command::new("7z")
+                .arg("x")
+                .arg(&mm.archive)
+                .arg(format!("-o{}", extracted_dir.to_string_lossy()))
+                .output()?
+                .status
+                .success()
+            {
+                mm.extracted = Some(extracted_dir);
+                println!("Extracted {:?} ", mod_name);
             }
         }
         Ok(())
@@ -326,7 +343,47 @@ impl Game {
         self.uninstall()?;
         self.install()?;
         self.write_plugins()?;
-        println!("Deployed");
+        println!("Deployed    ");
+        Ok(())
+    }
+    pub fn move_mod(&mut self, moved: String, to: MoveSubcommand) -> crate::Result<()> {
+        let moved_name = self.get_mod(&moved)?.0.to_string();
+        macro_rules! relative {
+            ($other:expr, $add:expr) => {{
+                let other_name = self.get_mod(&$other)?.0.to_string();
+                if moved_name == other_name {
+                    return Err(crate::Error::SelfRelativeMove(moved_name));
+                }
+                let moved_mm = self.config.mods.remove(&moved_name).unwrap();
+                let other_index = self
+                    .config
+                    .mods
+                    .keys()
+                    .position(|mod_name| mod_name == &other_name)
+                    .unwrap();
+                let mut mods_drain = self.config.mods.drain(..);
+                let mut new_mods: IndexMap<_, _> =
+                    mods_drain.by_ref().take(other_index + $add).collect();
+                new_mods.insert(moved_name, moved_mm);
+                new_mods.extend(mods_drain);
+                self.config.mods = new_mods;
+            }};
+        }
+        match to {
+            MoveSubcommand::Above { name: other } => relative!(other, 0),
+            MoveSubcommand::Below { name: other } => relative!(other, 1),
+            MoveSubcommand::Top => {
+                let moved_mm = self.config.mods.remove(&moved_name).unwrap();
+                let mut new_mods = IndexMap::new();
+                new_mods.insert(moved_name, moved_mm);
+                new_mods.extend(self.config.mods.drain(..));
+                self.config.mods = new_mods;
+            }
+            MoveSubcommand::Bottom => {
+                let moved_mm = self.config.mods.remove(&moved_name).unwrap();
+                self.config.mods.insert(moved_name, moved_mm);
+            }
+        }
         Ok(())
     }
 }
