@@ -225,28 +225,24 @@ impl Game {
         if mm.enabled && mm.extracted.is_none() {
             let extracted_dir = library::extracted_dir(game_name, mod_name)?;
             utils::print_erasable(&format!("Extracting {:?}...", mod_name));
-            if Command::new("7z")
+            Command::new("7z")
                 .arg("x")
                 .arg(&mm.archive)
                 .arg(format!("-o{}", extracted_dir.to_string_lossy()))
-                .output()?
-                .status
-                .success()
-            {
-                mm.extracted = Some(extracted_dir);
-                println!("Extracted {:?} ", mod_name);
-            }
+                .output()?;
+            mm.extracted = Some(extracted_dir);
+            println!("Extracted {:?} ", mod_name);
         }
         Ok(())
     }
     fn uninstall(&mut self) -> crate::Result<()> {
         let install_dir = self.install_dir();
         for (_, mm) in &mut self.config.mods {
-            if let Some(extracted_dir) = &mm.extracted {
-                let extraced_diff = differ(&extracted_dir);
-                for entry in WalkDir::new(&extracted_dir) {
+            for install_src in mm.part_paths() {
+                let src_diff = differ(&install_src);
+                for entry in WalkDir::new(&install_src) {
                     let file_entry = entry?;
-                    utils::remove_path(&install_dir, extraced_diff(&file_entry.path()).unwrap())?;
+                    utils::remove_path(&install_dir, src_diff(&file_entry.path()).unwrap())?;
                 }
             }
         }
