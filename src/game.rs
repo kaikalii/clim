@@ -142,14 +142,32 @@ pub struct Config {
     pub mods: IndexMap<String, ManagedMod>,
 }
 
+fn install_dir(
+    game_folder: &Path,
+    data_folder: Option<&Path>,
+    mod_has_data_folder: bool,
+) -> PathBuf {
+    if let (Some(data), false) = (&data_folder, mod_has_data_folder) {
+        game_folder.join(data)
+    } else {
+        game_folder.to_path_buf()
+    }
+}
+
+fn get_mod<'a>(
+    mods: &'a mut IndexMap<String, ManagedMod>,
+    name: &str,
+) -> crate::Result<(&'a str, &'a mut ManagedMod)> {
+    let name = name.to_lowercase();
+    mods.iter_mut()
+        .find(|(mod_name, _)| mod_name.to_lowercase().contains(&name))
+        .map(|(mod_name, mm)| (mod_name.as_str(), mm))
+        .ok_or(crate::Error::UnknownMod(name))
+}
+
 impl Config {
     pub fn get_mod(&mut self, name: &str) -> crate::Result<(&str, &mut ManagedMod)> {
-        let name = name.to_lowercase();
-        self.mods
-            .iter_mut()
-            .find(|(mod_name, _)| mod_name.to_lowercase().contains(&name))
-            .map(|(mod_name, mm)| (mod_name.as_str(), mm))
-            .ok_or(crate::Error::UnknownMod(name))
+        get_mod(&mut self.mods, name)
     }
 }
 
@@ -167,13 +185,6 @@ fn game_config_file(name: &str) -> crate::Result<PathBuf> {
 impl Game {
     pub fn config_file(&self) -> crate::Result<PathBuf> {
         game_config_file(&self.name)
-    }
-    pub fn install_dir(&self) -> PathBuf {
-        if let Some(data) = &self.config.data_folder {
-            self.config.game_folder.join(data)
-        } else {
-            self.config.game_folder.clone()
-        }
     }
     pub fn open(name: &str) -> crate::Result<Self> {
         let bytes = fs::read(game_config_file(name)?)?;
@@ -209,36 +220,67 @@ impl Game {
         Ok(())
     }
     pub fn enable(&mut self, name: &str) -> crate::Result<()> {
-        let (mod_name, mm) = self.config.get_mod(name)?;
-        Game::extract_mod(&self.name, mod_name, mm)?;
+        let (mod_name, mm) = get_mod(&mut self.config.mods, name)?;
+        Game::extract_mod(&self.name, self.config.data_folder.as_deref(), mod_name, mm)?;
         mm.enabled = true;
         println!("Enabled {}", mod_name);
         Ok(())
     }
     fn extract(&mut self) -> crate::Result<()> {
         for (mod_name, mm) in &mut self.config.mods {
-            Game::extract_mod(&self.name, mod_name, mm)?;
+            Game::extract_mod(&self.name, self.config.data_folder.as_deref(), mod_name, mm)?;
         }
         Ok(())
     }
-    fn extract_mod(game_name: &str, mod_name: &str, mm: &mut ManagedMod) -> crate::Result<()> {
+    fn extract_mod(
+        game_name: &str,
+        data_folder: Option<&Path>,
+        mod_name: &str,
+        mm: &mut ManagedMod,
+    ) -> crate::Result<()> {
         if mm.enabled && mm.extracted.is_none() {
-            let extracted_dir = library::extracted_dir(game_name, mod_name)?;
             waitln!("Extracting {:?}...", mod_name);
+            let extracted_dir = library::extracted_dir(game_name, mod_name)?;
+            let _ = fs::remove_dir_all(&extracted_dir);
             Command::new("7z")
                 .arg("x")
                 .arg(&mm.archive)
                 .arg(format!("-o{}", extracted_dir.to_string_lossy()))
+                .arg("-spe")
                 .output()?;
+            if fs::read_dir(&extracted_dir)?.filter_map(Result::ok).count() == 1
+                && !contains_data_folder(&extracted_dir, data_folder)?
+            {
+                let narrowed = fs::read_dir(&extracted_dir)?
+                    .filter_map(Result::ok)
+                    .next()
+                    .unwrap()
+                    .path();
+                for entry in fs::read_dir(&narrowed)?.filter_map(Result::ok) {
+                    let path_diff = diff_paths(entry.path(), &narrowed).unwrap();
+                    let new_path = extracted_dir.join(path_diff);
+                    fs::rename(entry.path(), new_path)?;
+                }
+                fs::remove_dir(narrowed)?;
+            }
             mm.extracted = Some(extracted_dir);
             colorln!(green, "done");
         }
         Ok(())
     }
     fn uninstall(&mut self) -> crate::Result<()> {
-        let install_dir = self.install_dir();
         for (_, mm) in &mut self.config.mods {
             for install_src in mm.part_paths() {
+                let contains_data_folder =
+                    match contains_data_folder(&install_src, self.config.data_folder.as_deref()) {
+                        Ok(cdf) => cdf,
+                        Err(_) => continue,
+                    };
+                let install_dir = install_dir(
+                    &self.config.game_folder,
+                    self.config.data_folder.as_deref(),
+                    contains_data_folder,
+                );
                 let src_diff = differ(&install_src);
                 for entry in WalkDir::new(&install_src) {
                     let file_entry = entry?;
@@ -249,9 +291,9 @@ impl Game {
         Ok(())
     }
     fn install(&mut self) -> crate::Result<()> {
-        let install_dir = self.install_dir();
         for (mod_name, mm) in &mut self.config.mods {
             if let (Some(extracted_dir), true) = (&mm.extracted, mm.enabled) {
+                // Search for a Fomod config
                 let config = WalkDir::new(&extracted_dir)
                     .into_iter()
                     .filter_map(Result::ok)
@@ -262,6 +304,7 @@ impl Game {
                             .map_or(false, |name| name == "ModuleConfig.xml")
                     })
                     .map(DirEntry::into_path);
+                // Get a list of folders from which to install things
                 let install_folders = if !mm.parts.is_empty() {
                     mm.parts.clone()
                 } else if config.is_some() {
@@ -277,16 +320,23 @@ impl Game {
                     vec![extracted_dir.clone()]
                 };
                 // For each folder
-                for folder in install_folders {
-                    let folder_diff = differ(&folder);
+                for install_src in install_folders {
+                    let contains_data_folder =
+                        contains_data_folder(&install_src, self.config.data_folder.as_deref())?;
+                    let install_dir = install_dir(
+                        &self.config.game_folder,
+                        self.config.data_folder.as_deref(),
+                        contains_data_folder,
+                    );
+                    let src_diff = differ(&install_src);
                     // For each file
-                    for entry in WalkDir::new(&folder) {
+                    for entry in WalkDir::new(&install_src) {
                         let file_entry = entry?;
                         if file_entry.file_type().is_file() {
                             let extracted_path =
-                                folder.join(folder_diff(&file_entry.path()).unwrap());
+                                install_src.join(src_diff(&file_entry.path()).unwrap());
                             let install_path =
-                                install_dir.join(folder_diff(&file_entry.path()).unwrap());
+                                install_dir.join(src_diff(&file_entry.path()).unwrap());
                             utils::create_dirs(&install_path)?;
                             // Deploy
                             match self.config.deployment {
@@ -397,4 +447,14 @@ where
     P: AsRef<Path>,
 {
     move |path| diff_paths(path, top)
+}
+
+fn contains_data_folder(path: &Path, data_folder: Option<&Path>) -> crate::Result<bool> {
+    Ok(if let Some(data) = data_folder {
+        fs::read_dir(&path)?
+            .filter_map(Result::ok)
+            .any(|entry| entry.path().ends_with(data))
+    } else {
+        false
+    })
 }
