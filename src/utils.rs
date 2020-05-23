@@ -1,4 +1,7 @@
-use std::{fs, io, path::Path};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 #[macro_export]
 macro_rules! colorln {
@@ -13,6 +16,28 @@ macro_rules! waitln {
         print!($format, $($item),*);
         let _ = std::io::Write::flush(&mut std::io::stdout());
     }
+}
+
+pub fn capitalize_path(top: &Path, path: &Path) -> PathBuf {
+    let diff = pathdiff::diff_paths(path, top).unwrap();
+    let capped: PathBuf = diff
+        .iter()
+        .map(|part| {
+            part.to_string_lossy()
+                .chars()
+                .enumerate()
+                .flat_map(|(i, c)| {
+                    if i == 0 {
+                        c.to_uppercase().collect::<Vec<_>>()
+                    } else {
+                        vec![c]
+                    }
+                })
+                .collect::<String>()
+        })
+        .map(PathBuf::from)
+        .collect();
+    top.join(capped)
 }
 
 pub fn remove_path<P, Q>(top: P, name: Q) -> io::Result<()>

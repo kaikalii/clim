@@ -277,26 +277,45 @@ impl Game {
             waitln!("Extracting {:?}...", mod_name);
             let extracted_dir = library::extracted_dir(game_name, mod_name)?;
             let _ = fs::remove_dir_all(&extracted_dir);
+            // Extract
             Command::new("7z")
                 .arg("x")
                 .arg(&mm.archive)
                 .arg(format!("-o{}", extracted_dir.to_string_lossy()))
                 .arg("-spe")
                 .output()?;
+            // If there is exactly one entry in the folder and it is not a Data folder
             if fs::read_dir(&extracted_dir)?.filter_map(Result::ok).count() == 1
                 && !contains_data_folder(&extracted_dir, data_folder)?
             {
+                // Get the inner folder
                 let narrowed = fs::read_dir(&extracted_dir)?
                     .filter_map(Result::ok)
                     .next()
                     .unwrap()
                     .path();
+                // Rename all entries in the inner folder to be in the outer folder
                 for entry in fs::read_dir(&narrowed)?.filter_map(Result::ok) {
                     let path_diff = diff_paths(entry.path(), &narrowed).unwrap();
                     let new_path = extracted_dir.join(path_diff);
                     fs::rename(entry.path(), new_path)?;
                 }
+                // Remove the now-empty inner folder
                 fs::remove_dir(narrowed)?;
+            }
+            // Capitalize all folders on unix
+            if cfg!(unix) {
+                for entry in WalkDir::new(&extracted_dir)
+                    .into_iter()
+                    .filter_map(Result::ok)
+                {
+                    if entry.file_type().is_dir() {
+                        let _ = fs::rename(
+                            entry.path(),
+                            utils::capitalize_path(&extracted_dir, entry.path()),
+                        );
+                    }
+                }
             }
             mm.extracted = Some(extracted_dir);
             colorln!(green, "done");
