@@ -99,7 +99,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "climm"
+name = "clim"
 version = "0.1.0"
 dependencies = [
  "colored",

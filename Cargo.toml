@@ -20,5 +20,5 @@ version = '1.3.2'
 [package]
 authors = ['kai']
 edition = '2018'
-name = 'climm'
+name = 'clim'
 version = '0.1.0'
