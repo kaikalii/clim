@@ -36,7 +36,11 @@ fn run() -> Result<()> {
             gc.init_game(name, game_folder, data, plugins)?;
         }
         App::Go => gc.active_game()?.go()?,
-        App::Add { archives, r#move } => gc.active_game()?.add(&archives, r#move)?,
+        App::Add {
+            archives,
+            r#move,
+            enable,
+        } => gc.active_game()?.add(&archives, r#move, enable)?,
         App::Enable { names, all } => {
             let mut game = gc.active_game()?;
             if all {
@@ -107,7 +111,7 @@ fn run() -> Result<()> {
         App::GameFolder => {
             open::that(&gc.active_game()?.config.game_folder)?;
         }
-        App::Watch { folder } => {
+        App::Watch { folder, enable } => {
             use notify::{
                 event::CreateKind, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
             };
@@ -131,7 +135,7 @@ fn run() -> Result<()> {
                         if path.extension().map_or(false, |ext| ext != "crdownload") {
                             if let Err(e) = gc
                                 .active_game()
-                                .and_then(|mut game| game.add(&[path], true))
+                                .and_then(|mut game| game.add(&[path], true, enable))
                             {
                                 println!("{}", e);
                             }

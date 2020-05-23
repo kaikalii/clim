@@ -36,13 +36,17 @@ pub enum App {
             help = "Whether to move the files instead of copying them"
         )]
         r#move: bool,
+        #[structopt(long, short, help = "Enable all added mods")]
+        enable: bool,
     },
     #[structopt(
-        about = "Watch a directory for new downloads. \nNew downloads will be moved to the active game's downloads folder."
+        about = "Watch a directory for new downloads. \nNew downloads will be added to the active game's mods."
     )]
     Watch {
         #[structopt(help = "The folder to watch. Defaults to your user downloads folder")]
         folder: Option<PathBuf>,
+        #[structopt(long, short, help = "Enable all added mods")]
+        enable: bool,
     },
     #[structopt(about = "Enable mods")]
     Enable {

@@ -201,7 +201,7 @@ impl Game {
     pub fn get_mod(&mut self, name: &str) -> crate::Result<(&str, &mut ManagedMod)> {
         self.config.get_mod(name)
     }
-    pub fn add(&mut self, paths: &[PathBuf], mv: bool) -> crate::Result<()> {
+    pub fn add(&mut self, paths: &[PathBuf], mv: bool, enable: bool) -> crate::Result<()> {
         for path in paths {
             if let Some(file_name) = path.file_name() {
                 let download_copy = library::downloads_dir(&self.name)?.join(file_name);
@@ -213,7 +213,9 @@ impl Game {
                 let mod_name = path.file_stem().unwrap().to_string_lossy().into_owned();
                 self.config
                     .mods
-                    .insert(mod_name.clone(), ManagedMod::new(download_copy));
+                    .entry(mod_name.clone())
+                    .or_insert_with(|| ManagedMod::new(download_copy))
+                    .enabled = enable;
                 println!("Added {:?}", mod_name);
             }
         }
