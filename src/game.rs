@@ -61,7 +61,7 @@ impl GlobalConfig {
             },
         }
         .save()?;
-        library::downloads_dir(&name)?;
+        library::archives_dir(&name)?;
         println!("Climm initialized {}", name);
         Ok(())
     }
@@ -205,7 +205,7 @@ impl Game {
     pub fn add(&mut self, paths: &[PathBuf], mv: bool, enable: bool) -> crate::Result<()> {
         for path in paths {
             if let Some(file_name) = path.file_name() {
-                let download_copy = library::downloads_dir(&self.name)?.join(file_name);
+                let download_copy = library::archives_dir(&self.name)?.join(file_name);
                 if mv {
                     fs::rename(path, &download_copy)?;
                 } else {

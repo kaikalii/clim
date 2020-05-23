@@ -105,8 +105,8 @@ fn run() -> Result<()> {
                 println!("No active game");
             }
         }
-        App::Downloads => {
-            open::that(library::downloads_dir(&gc.active_game()?.name)?)?;
+        App::Archives => {
+            open::that(library::archives_dir(&gc.active_game()?.name)?)?;
         }
         App::GameFolder => {
             open::that(&gc.active_game()?.config.game_folder)?;

@@ -36,8 +36,8 @@ pub fn game_dir(game: &str) -> crate::Result<PathBuf> {
     climm_dir().and_then(|climm| climm.join(game).and_create_dirs())
 }
 
-pub fn downloads_dir(game: &str) -> crate::Result<PathBuf> {
-    game_dir(game).and_then(|game| game.join("downloads").and_create_dirs())
+pub fn archives_dir(game: &str) -> crate::Result<PathBuf> {
+    game_dir(game).and_then(|game| game.join("archives").and_create_dirs())
 }
 
 pub fn extracted_dir(game: &str, mod_name: &str) -> crate::Result<PathBuf> {

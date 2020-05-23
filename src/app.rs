@@ -89,8 +89,8 @@ pub enum App {
     },
     #[structopt(about = "Get the name of the active game")]
     Active,
-    #[structopt(about = "Open the active game's downloads folder")]
-    Downloads,
+    #[structopt(about = "Open the active game's archives folder")]
+    Archives,
     #[structopt(about = "Open the active game's main folder")]
     GameFolder,
 }
