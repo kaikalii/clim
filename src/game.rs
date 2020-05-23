@@ -298,25 +298,32 @@ impl Game {
         }
         Ok(())
     }
+    fn undeploy_mod(
+        game_folder: &Path,
+        data_folder: Option<&Path>,
+        mm: &mut ManagedMod,
+    ) -> crate::Result<()> {
+        for install_src in mm.part_paths() {
+            let contains_data_folder = match contains_data_folder(&install_src, data_folder) {
+                Ok(cdf) => cdf,
+                Err(_) => continue,
+            };
+            let install_dir = install_dir(&game_folder, data_folder, contains_data_folder);
+            let src_diff = differ(&install_src);
+            for entry in WalkDir::new(&install_src) {
+                let file_entry = entry?;
+                utils::remove_path(&install_dir, src_diff(&file_entry.path()).unwrap())?;
+            }
+        }
+        Ok(())
+    }
     fn undeploy(&mut self) -> crate::Result<()> {
         for (_, mm) in &mut self.config.mods {
-            for install_src in mm.part_paths() {
-                let contains_data_folder =
-                    match contains_data_folder(&install_src, self.config.data_folder.as_deref()) {
-                        Ok(cdf) => cdf,
-                        Err(_) => continue,
-                    };
-                let install_dir = install_dir(
-                    &self.config.game_folder,
-                    self.config.data_folder.as_deref(),
-                    contains_data_folder,
-                );
-                let src_diff = differ(&install_src);
-                for entry in WalkDir::new(&install_src) {
-                    let file_entry = entry?;
-                    utils::remove_path(&install_dir, src_diff(&file_entry.path()).unwrap())?;
-                }
-            }
+            Game::undeploy_mod(
+                &self.config.game_folder,
+                self.config.data_folder.as_deref(),
+                mm,
+            )?;
         }
         Ok(())
     }
@@ -423,10 +430,13 @@ impl Game {
         Ok(())
     }
     fn uninstall_mod(
+        game_folder: &Path,
+        data_folder: Option<&Path>,
         mod_name: &str,
         mm: &mut ManagedMod,
         delete_archives: bool,
     ) -> crate::Result<()> {
+        Game::undeploy_mod(game_folder, data_folder, mm)?;
         if delete_archives {
             fs::remove_file(&mm.archive)?;
         }
@@ -437,8 +447,14 @@ impl Game {
         Ok(())
     }
     pub fn uninstall(&mut self, name: &str, delete_archives: bool) -> crate::Result<()> {
-        let (mod_name, mm) = self.get_mod(name)?;
-        Game::uninstall_mod(mod_name, mm, delete_archives)?;
+        let (mod_name, mm) = get_mod(&mut self.config.mods, name)?;
+        Game::uninstall_mod(
+            &self.config.game_folder,
+            self.config.data_folder.as_deref(),
+            mod_name,
+            mm,
+            delete_archives,
+        )?;
         if delete_archives {
             let mod_name = mod_name.to_string();
             self.config.mods.remove(&mod_name);
@@ -447,7 +463,13 @@ impl Game {
     }
     pub fn uninstall_all(&mut self, delete_archives: bool) -> crate::Result<()> {
         for (mod_name, mm) in &mut self.config.mods {
-            Game::uninstall_mod(mod_name, mm, delete_archives)?;
+            Game::uninstall_mod(
+                &self.config.game_folder,
+                self.config.data_folder.as_deref(),
+                mod_name,
+                mm,
+                delete_archives,
+            )?;
         }
         if delete_archives {
             self.config.mods.clear();
