@@ -219,11 +219,39 @@ impl Game {
         }
         Ok(())
     }
-    pub fn enable(&mut self, name: &str) -> crate::Result<()> {
-        let (mod_name, mm) = get_mod(&mut self.config.mods, name)?;
-        Game::extract_mod(&self.name, self.config.data_folder.as_deref(), mod_name, mm)?;
+    fn enable_mod(
+        data_folder: Option<&Path>,
+        mod_name: &str,
+        mm: &mut ManagedMod,
+    ) -> crate::Result<()> {
+        Game::extract_mod(mod_name, data_folder, mod_name, mm)?;
         mm.enabled = true;
         println!("Enabled {}", mod_name);
+        Ok(())
+    }
+    pub fn enable(&mut self, name: &str) -> crate::Result<()> {
+        let (mod_name, mm) = get_mod(&mut self.config.mods, name)?;
+        Game::enable_mod(self.config.data_folder.as_deref(), mod_name, mm)
+    }
+    pub fn enable_all(&mut self) -> crate::Result<()> {
+        for (mod_name, mm) in &mut self.config.mods {
+            Game::enable_mod(self.config.data_folder.as_deref(), mod_name, mm)?;
+        }
+        Ok(())
+    }
+    fn disable_mod(mod_name: &str, mm: &mut ManagedMod) {
+        mm.enabled = false;
+        println!("Disabled {}", mod_name);
+    }
+    pub fn disable(&mut self, name: &str) -> crate::Result<()> {
+        let (mod_name, mm) = get_mod(&mut self.config.mods, name)?;
+        Game::disable_mod(mod_name, mm);
+        Ok(())
+    }
+    pub fn disable_all(&mut self) -> crate::Result<()> {
+        for (mod_name, mm) in &mut self.config.mods {
+            Game::disable_mod(mod_name, mm);
+        }
         Ok(())
     }
     fn extract(&mut self) -> crate::Result<()> {

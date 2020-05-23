@@ -48,11 +48,15 @@ pub enum App {
     Enable {
         #[structopt(help = "The names of the mods to enable. They do not need to be exact.")]
         names: Vec<String>,
+        #[structopt(long, help = "Enable all mods")]
+        all: bool,
     },
     #[structopt(about = "Disable mods")]
     Disable {
         #[structopt(help = "The names of the mods to disable. They do not need to be exact.")]
         names: Vec<String>,
+        #[structopt(long, help = "Disable all mods")]
+        all: bool,
     },
     #[structopt(about = "List all mods")]
     Mods,

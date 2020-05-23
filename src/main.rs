@@ -37,18 +37,24 @@ fn run() -> Result<()> {
         }
         App::Go => gc.active_game()?.deploy()?,
         App::Add { archives, r#move } => gc.active_game()?.add(&archives, r#move)?,
-        App::Enable { names } => {
+        App::Enable { names, all } => {
             let mut game = gc.active_game()?;
-            for name in names {
-                game.enable(&name)?;
+            if all {
+                game.enable_all()?;
+            } else {
+                for name in names {
+                    game.enable(&name)?;
+                }
             }
         }
-        App::Disable { names } => {
+        App::Disable { names, all } => {
             let mut game = gc.active_game()?;
-            for name in names {
-                let (mod_name, mm) = game.get_mod(&name)?;
-                mm.enabled = false;
-                println!("Disabled {}", mod_name);
+            if all {
+                game.disable_all()?;
+            } else {
+                for name in names {
+                    game.disable(&name)?;
+                }
             }
         }
         App::Mods => {
