@@ -228,8 +228,10 @@ impl Game {
         mm: &mut ManagedMod,
     ) -> crate::Result<()> {
         Game::extract_mod(mod_name, data_folder, mod_name, mm)?;
-        mm.enabled = true;
-        println!("Enabled {}", mod_name);
+        if !mm.enabled {
+            mm.enabled = true;
+            println!("Enabled {}", mod_name);
+        }
         Ok(())
     }
     pub fn enable(&mut self, name: &str) -> crate::Result<()> {
@@ -243,8 +245,10 @@ impl Game {
         Ok(())
     }
     fn disable_mod(mod_name: &str, mm: &mut ManagedMod) {
-        mm.enabled = false;
-        println!("Disabled {}", mod_name);
+        if mm.enabled {
+            mm.enabled = false;
+            println!("Disabled {}", mod_name);
+        }
     }
     pub fn disable(&mut self, name: &str) -> crate::Result<()> {
         let (mod_name, mm) = get_mod(&mut self.config.mods, name)?;
@@ -437,6 +441,7 @@ impl Game {
         mm: &mut ManagedMod,
         delete_archives: bool,
     ) -> crate::Result<()> {
+        Game::disable_mod(mod_name, mm);
         Game::undeploy_mod(game_folder, data_folder, mm)?;
         if delete_archives {
             fs::remove_file(&mm.archive)?;
