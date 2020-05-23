@@ -296,7 +296,7 @@ impl Game {
         }
         Ok(())
     }
-    fn uninstall(&mut self) -> crate::Result<()> {
+    fn undeploy(&mut self) -> crate::Result<()> {
         for (_, mm) in &mut self.config.mods {
             for install_src in mm.part_paths() {
                 let contains_data_folder =
@@ -318,7 +318,7 @@ impl Game {
         }
         Ok(())
     }
-    fn install(&mut self) -> crate::Result<()> {
+    fn deploy(&mut self) -> crate::Result<()> {
         for (mod_name, mm) in &mut self.config.mods {
             if let (Some(extracted_dir), true) = (&mm.extracted, mm.enabled) {
                 // Search for a Fomod config
@@ -411,13 +411,45 @@ impl Game {
         }
         Ok(())
     }
-    pub fn deploy(&mut self) -> crate::Result<()> {
+    pub fn go(&mut self) -> crate::Result<()> {
         self.extract()?;
         waitln!("Deploying...");
-        self.uninstall()?;
-        self.install()?;
+        self.undeploy()?;
+        self.deploy()?;
         self.write_plugins()?;
         colorln!(green, "done");
+        Ok(())
+    }
+    fn uninstall_mod(
+        mod_name: &str,
+        mm: &mut ManagedMod,
+        delete_archives: bool,
+    ) -> crate::Result<()> {
+        if delete_archives {
+            fs::remove_file(&mm.archive)?;
+        }
+        if let Some(extracted) = mm.extracted.take() {
+            fs::remove_dir_all(extracted)?;
+            println!("Uninstalled {}", mod_name);
+        }
+        Ok(())
+    }
+    pub fn uninstall(&mut self, name: &str, delete_archives: bool) -> crate::Result<()> {
+        let (mod_name, mm) = self.get_mod(name)?;
+        Game::uninstall_mod(mod_name, mm, delete_archives)?;
+        if delete_archives {
+            let mod_name = mod_name.to_string();
+            self.config.mods.remove(&mod_name);
+        }
+        Ok(())
+    }
+    pub fn uninstall_all(&mut self, delete_archives: bool) -> crate::Result<()> {
+        for (mod_name, mm) in &mut self.config.mods {
+            Game::uninstall_mod(mod_name, mm, delete_archives)?;
+        }
+        if delete_archives {
+            self.config.mods.clear();
+        }
         Ok(())
     }
     pub fn move_mod(&mut self, moved: String, to: MoveSubcommand) -> crate::Result<()> {

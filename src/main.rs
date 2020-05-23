@@ -35,7 +35,7 @@ fn run() -> Result<()> {
         } => {
             gc.init_game(name, game_folder, data, plugins)?;
         }
-        App::Go => gc.active_game()?.deploy()?,
+        App::Go => gc.active_game()?.go()?,
         App::Add { archives, r#move } => gc.active_game()?.add(&archives, r#move)?,
         App::Enable { names, all } => {
             let mut game = gc.active_game()?;
@@ -72,6 +72,20 @@ fn run() -> Result<()> {
             }
         }
         App::Move { name, sub } => gc.active_game()?.move_mod(name, sub)?,
+        App::Uninstall {
+            names,
+            delete_archives,
+            all,
+        } => {
+            let mut game = gc.active_game()?;
+            if all {
+                game.uninstall_all(delete_archives)?;
+            } else {
+                for name in names {
+                    game.uninstall(&name, delete_archives)?;
+                }
+            }
+        }
         App::SetActive { name } => {
             if gc.games.contains(&name) {
                 println!("Set {:?} as active game", name);

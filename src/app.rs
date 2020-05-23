@@ -69,6 +69,15 @@ pub enum App {
         #[structopt(subcommand)]
         sub: MoveSubcommand,
     },
+    #[structopt(about = "Uninstall mods")]
+    Uninstall {
+        #[structopt(help = "The names of the mods to uninstall")]
+        names: Vec<String>,
+        #[structopt(long, help = "Delete the archives as well")]
+        delete_archives: bool,
+        #[structopt(long, help = "Uninstall all mods")]
+        all: bool,
+    },
     #[structopt(about = "Set the active game")]
     SetActive {
         #[structopt(help = "The name of the game")]
