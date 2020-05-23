@@ -175,7 +175,7 @@ fn child_text<'a>(elem: &'a Element, name: &str) -> Result<Cow<'a, str>, Error> 
     child(elem, name).map(|elem| elem.get_text().unwrap())
 }
 
-pub fn pseudo_fomod<P>(top: P) -> crate::Result<Vec<PathBuf>>
+pub fn pseudo_fomod<P>(mod_name: &str, top: P) -> crate::Result<Vec<PathBuf>>
 where
     P: AsRef<Path>,
 {
@@ -189,8 +189,9 @@ where
             .path();
     }
     let mut install_paths = Vec::new();
-    let mut entries: Vec<_> = fs::read_dir(path)?.filter_map(Result::ok).collect();
+    let mut entries: Vec<_> = fs::read_dir(&path)?.filter_map(Result::ok).collect();
     entries.sort_by_key(|entry| entry.path());
+    let mut any_parts = false;
     for entry in entries {
         if entry.file_type()?.is_dir() {
             let lowest = entry.path().iter().last().unwrap().to_owned();
@@ -200,6 +201,14 @@ where
                 .next()
                 .map_or(false, |c| c.is_digit(10));
             if starts_with_num {
+                if !any_parts {
+                    println!(
+                        "{:?} has a Fomod installer, but climm does not currently support it. \
+                        You can still select which sections you want to install.",
+                        mod_name
+                    );
+                    any_parts = true;
+                }
                 print!("Would you like to install {:?}? (yes/no) ", lowest);
                 stdout().flush()?;
                 let input = stdin().lock().lines().next().unwrap()?.to_lowercase();
@@ -210,6 +219,9 @@ where
                 }
             }
         }
+    }
+    if !any_parts {
+        return Ok(vec![path]);
     }
     Ok(install_paths)
 }

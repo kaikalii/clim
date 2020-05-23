@@ -11,6 +11,7 @@ thiserror = '1.0.19'
 toml = '0.5.6'
 walkdir = '2.3.1'
 xmltree = '0.10.0'
+itertools = "*"
 
 [dependencies.indexmap]
 features = ['serde-1']

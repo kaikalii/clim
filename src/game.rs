@@ -7,6 +7,7 @@ use std::{
 };
 
 use indexmap::IndexMap;
+use itertools::Itertools;
 use pathdiff::diff_paths;
 use serde_derive::{Deserialize, Serialize};
 use walkdir::{DirEntry, WalkDir};
@@ -345,12 +346,7 @@ impl Game {
                 let install_folders = if !mm.parts.is_empty() {
                     mm.parts.clone()
                 } else if config.is_some() {
-                    println!(
-                        "{:?} has a Fomod installer, but climm does not currently support it. \
-                        You can still select which sections you want to install.",
-                        mod_name
-                    );
-                    let paths = fomod::pseudo_fomod(&extracted_dir)?;
+                    let paths = fomod::pseudo_fomod(mod_name, &extracted_dir)?;
                     mm.parts = paths.clone();
                     paths
                 } else {
@@ -378,13 +374,17 @@ impl Game {
                             // Deploy
                             match self.config.deployment {
                                 DeploymentMethod::Hardlink => {
-                                    fs::hard_link(extracted_path, install_path)?
+                                    let _ = fs::hard_link(extracted_path, install_path);
                                 }
                                 DeploymentMethod::Symlink => {
                                     #[cfg(unix)]
-                                    std::os::unix::fs::symlink(extracted_path, install_path)?;
+                                    let _ =
+                                        std::os::unix::fs::symlink(extracted_path, install_path);
                                     #[cfg(windows)]
-                                    std::os::windows::fs::hardlink(extracted_path, install_path)?;
+                                    let _ = std::os::windows::fs::hardlink(
+                                        extracted_path,
+                                        install_path,
+                                    );
                                 }
                             }
                         }
@@ -410,6 +410,7 @@ impl Game {
                     }
                 })
             })
+            .dedup()
     }
     pub fn write_plugins(&self) -> crate::Result<()> {
         if let Some(plugins) = &self.config.plugins_file {
