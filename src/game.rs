@@ -44,6 +44,7 @@ impl GlobalConfig {
         folder: PathBuf,
         data: Option<PathBuf>,
         plugins: Option<PathBuf>,
+        exe: Option<PathBuf>,
     ) -> crate::Result<()> {
         if self.games.contains(&name) {
             return Err(crate::Error::AlreadyManaged(name));
@@ -56,6 +57,7 @@ impl GlobalConfig {
                 data_folder: data,
                 game_folder: folder,
                 plugins_file: plugins,
+                exe,
                 deployment: DeploymentMethod::default(),
                 mods: IndexMap::new(),
             },
@@ -139,6 +141,7 @@ pub struct Config {
     pub game_folder: PathBuf,
     pub data_folder: Option<PathBuf>,
     pub plugins_file: Option<PathBuf>,
+    pub exe: Option<PathBuf>,
     pub deployment: DeploymentMethod,
     pub mods: IndexMap<String, ManagedMod>,
 }

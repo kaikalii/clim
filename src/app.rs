@@ -23,6 +23,12 @@ pub enum App {
             help = "The path to the game's master plugins file, if it has one"
         )]
         plugins: Option<PathBuf>,
+        #[structopt(
+            long,
+            short,
+            help = "The path to the game's exectuable, relative to the game folder"
+        )]
+        exe: Option<PathBuf>,
     },
     #[structopt(alias = "deploy", about = "Deploy mods")]
     Go,
@@ -93,6 +99,8 @@ pub enum App {
     Archives,
     #[structopt(about = "Open the active game's main folder")]
     GameFolder,
+    #[structopt(about = "Run the game")]
+    Run,
 }
 
 #[derive(Debug, StructOpt)]

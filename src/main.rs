@@ -32,8 +32,9 @@ fn run() -> Result<()> {
             game_folder,
             data,
             plugins,
+            exe,
         } => {
-            gc.init_game(name, game_folder, data, plugins)?;
+            gc.init_game(name, game_folder, data, plugins, exe)?;
         }
         App::Go => gc.active_game()?.go()?,
         App::Add {
@@ -110,6 +111,14 @@ fn run() -> Result<()> {
         }
         App::GameFolder => {
             open::that(&gc.active_game()?.config.game_folder)?;
+        }
+        App::Run => {
+            let game = gc.active_game()?;
+            if let Some(exe) = &game.config.exe {
+                open::that(game.config.game_folder.join(exe))?;
+            } else {
+                return Err(Error::NoGameExectuable);
+            }
         }
         App::Watch { folder, enable } => {
             use notify::{

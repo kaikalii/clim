@@ -26,6 +26,8 @@ pub enum Error {
     Notify(#[from] notify::Error),
     #[error("Cannot move {0} in relation to itself")]
     SelfRelativeMove(String),
+    #[error("No game executable set")]
+    NoGameExectuable,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
