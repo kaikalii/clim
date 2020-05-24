@@ -7,7 +7,12 @@ mod game;
 mod library;
 use app::*;
 
-use std::io::{stdin, BufRead};
+use std::{
+    collections::HashSet,
+    fs,
+    io::{stdin, BufRead},
+    sync::{Arc, Mutex},
+};
 
 use structopt::StructOpt;
 
@@ -121,41 +126,40 @@ fn run() -> Result<()> {
             }
         }
         App::Watch { folder, enable } => {
-            use notify::{
-                event::CreateKind, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
-            };
+            use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
             let path = if let Some(folder) = folder {
                 folder
             } else {
                 dirs::download_dir().ok_or(Error::NoDownloadsDirectory)?
             };
-            let mut watcher: RecommendedWatcher = Watcher::new_immediate(move |res| match res {
-                Ok(Event {
-                    kind: EventKind::Create(CreateKind::Any),
-                    paths,
-                    ..
-                })
-                | Ok(Event {
-                    kind: EventKind::Create(CreateKind::File),
-                    paths,
-                    ..
-                }) => {
-                    for path in paths {
-                        if path.extension().map_or(false, |ext| ext != "crdownload") {
-                            if let Err(e) = gc
-                                .active_game()
-                                .and_then(|mut game| game.add(&[path], true, enable))
-                            {
-                                println!("{}", e);
-                            }
+            let added_paths = Arc::new(Mutex::new(HashSet::new()));
+            let added_paths_clone = Arc::clone(&added_paths);
+            let mut watcher: RecommendedWatcher =
+                Watcher::new_immediate(move |res: notify::Result<Event>| {
+                    let event = if let Ok(event) = res {
+                        event
+                    } else {
+                        return;
+                    };
+                    let path = event.paths[0].clone();
+                    if path.extension().map_or(false, |ext| ext != "crdownload") {
+                        if let Err(e) = gc
+                            .active_game()
+                            .and_then(|mut game| game.add(&[path.clone()], false, enable))
+                        {
+                            println!("{}", e);
+                        } else {
+                            added_paths.lock().unwrap().insert(path);
                         }
                     }
-                }
-                _ => {}
-            })?;
+                })?;
             watcher.watch(&path, RecursiveMode::NonRecursive)?;
             println!("Watching {:?}. Press enter to end...", path);
             stdin().lock().lines().next().unwrap()?;
+            let added_paths = added_paths_clone.lock().unwrap();
+            for path in added_paths.iter() {
+                fs::remove_file(path)?;
+            }
         }
     }
 

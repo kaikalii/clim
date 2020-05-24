@@ -218,9 +218,11 @@ impl Game {
                 self.config
                     .mods
                     .entry(mod_name.clone())
-                    .or_insert_with(|| ManagedMod::new(download_copy))
+                    .or_insert_with(|| {
+                        println!("Added {:?}", mod_name);
+                        ManagedMod::new(download_copy)
+                    })
                     .enabled = enable;
-                println!("Added {:?}", mod_name);
             }
         }
         Ok(())
