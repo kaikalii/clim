@@ -300,7 +300,7 @@ impl Game {
                 // Get the inner folder
                 let narrowed = fs::read_dir(&extracted_dir)?
                     .filter_map(Result::ok)
-                    .next()
+                    .find(|entry| entry.path().is_dir())
                     .unwrap()
                     .path();
                 // Rename all entries in the inner folder to be in the outer folder
