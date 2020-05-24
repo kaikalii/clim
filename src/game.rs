@@ -290,7 +290,11 @@ impl Game {
                 .arg("-spe")
                 .output()?;
             // If there is exactly one entry in the folder and it is not a Data folder
-            if fs::read_dir(&extracted_dir)?.filter_map(Result::ok).count() == 1
+            if fs::read_dir(&extracted_dir)?
+                .filter_map(Result::ok)
+                .filter(|entry| entry.path().is_dir())
+                .count()
+                == 1
                 && !contains_data_folder(&extracted_dir, data_folder)?
             {
                 // Get the inner folder
