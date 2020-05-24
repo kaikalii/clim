@@ -126,7 +126,7 @@ fn run() -> Result<()> {
             }
         }
         App::Watch { folder, enable } => {
-            use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
+            use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
             let path = if let Some(folder) = folder {
                 folder
             } else {
@@ -142,7 +142,9 @@ fn run() -> Result<()> {
                         return;
                     };
                     let path = event.paths[0].clone();
-                    if path.extension().map_or(false, |ext| ext != "crdownload") {
+                    if path.extension().map_or(false, |ext| ext != "crdownload")
+                        && !matches!(event.kind, EventKind::Remove(_))
+                    {
                         if let Err(e) = gc
                             .active_game()
                             .and_then(|mut game| game.add(&[path.clone()], false, enable))
