@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("IO error: {0}")]
@@ -28,6 +30,8 @@ pub enum Error {
     SelfRelativeMove(String),
     #[error("No game executable set")]
     NoGameExectuable,
+    #[error("Error extracting {archive:?} (error code {code:?})")]
+    Extraction { archive: PathBuf, code: Option<i32> },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

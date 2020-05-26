@@ -283,12 +283,19 @@ impl Game {
             let extracted_dir = library::extracted_dir(game_name, mod_name)?;
             let _ = fs::remove_dir_all(&extracted_dir);
             // Extract
-            Command::new("7z")
+            let status = Command::new("7z")
                 .arg("x")
                 .arg(&mm.archive)
                 .arg(format!("-o{}", extracted_dir.to_string_lossy()))
                 .arg("-spe")
-                .output()?;
+                .output()?
+                .status;
+            if !status.success() {
+                return Err(crate::Error::Extraction {
+                    archive: mm.archive.clone(),
+                    code: status.code(),
+                });
+            }
             // If there is exactly one entry in the folder and it is not a Data folder
             if fs::read_dir(&extracted_dir)?
                 .filter_map(Result::ok)
@@ -518,7 +525,7 @@ impl Game {
                 if moved_name == other_name {
                     return Err(crate::Error::SelfRelativeMove(moved_name));
                 }
-                let moved_mm = self.config.mods.remove(&moved_name).unwrap();
+                let moved_mm = self.config.mods.shift_remove(&moved_name).unwrap();
                 let other_index = self
                     .config
                     .mods
@@ -537,14 +544,14 @@ impl Game {
             MoveSubcommand::Above { name: other } => relative!(other, 0),
             MoveSubcommand::Below { name: other } => relative!(other, 1),
             MoveSubcommand::Top => {
-                let moved_mm = self.config.mods.remove(&moved_name).unwrap();
+                let moved_mm = self.config.mods.shift_remove(&moved_name).unwrap();
                 let mut new_mods = IndexMap::new();
                 new_mods.insert(moved_name, moved_mm);
                 new_mods.extend(self.config.mods.drain(..));
                 self.config.mods = new_mods;
             }
             MoveSubcommand::Bottom => {
-                let moved_mm = self.config.mods.remove(&moved_name).unwrap();
+                let moved_mm = self.config.mods.shift_remove(&moved_name).unwrap();
                 self.config.mods.insert(moved_name, moved_mm);
             }
         }
