@@ -118,4 +118,14 @@ pub enum MoveSubcommand {
     Top,
     #[structopt(about = "Move to the bottom")]
     Bottom,
+    #[structopt(about = "Move down")]
+    Down {
+        #[structopt(help = "The number of spots to move down")]
+        n: Option<usize>,
+    },
+    #[structopt(about = "Move up")]
+    Up {
+        #[structopt(help = "The number of spots to move up")]
+        n: Option<usize>,
+    },
 }

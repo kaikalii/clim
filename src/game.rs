@@ -549,6 +549,38 @@ impl Game {
                 let moved_mm = self.config.mods.shift_remove(&moved_name).unwrap();
                 self.config.mods.insert(moved_name, moved_mm);
             }
+            MoveSubcommand::Down { n } => {
+                let n = n.unwrap_or(1);
+                let moved_index = self
+                    .config
+                    .mods
+                    .keys()
+                    .position(|mod_name| mod_name == &moved_name)
+                    .unwrap();
+                let target = (moved_index + n).min(self.config.mods.len());
+                let moved_mm = self.config.mods.shift_remove(&moved_name).unwrap();
+                let mut mods_drain = self.config.mods.drain(..);
+                let mut new_mods: IndexMap<_, _> = mods_drain.by_ref().take(target).collect();
+                new_mods.insert(moved_name, moved_mm);
+                new_mods.extend(mods_drain);
+                self.config.mods = new_mods;
+            }
+            MoveSubcommand::Up { n } => {
+                let n = n.unwrap_or(1);
+                let moved_index = self
+                    .config
+                    .mods
+                    .keys()
+                    .position(|mod_name| mod_name == &moved_name)
+                    .unwrap();
+                let target = moved_index.saturating_sub(n);
+                let moved_mm = self.config.mods.shift_remove(&moved_name).unwrap();
+                let mut mods_drain = self.config.mods.drain(..);
+                let mut new_mods: IndexMap<_, _> = mods_drain.by_ref().take(target).collect();
+                new_mods.insert(moved_name, moved_mm);
+                new_mods.extend(mods_drain);
+                self.config.mods = new_mods;
+            }
         }
         Ok(())
     }
