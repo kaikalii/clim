@@ -12,12 +12,7 @@ use pathdiff::diff_paths;
 use serde_derive::{Deserialize, Serialize};
 use walkdir::{DirEntry, WalkDir};
 
-use crate::{
-    app::MoveSubcommand,
-    colorln, fomod,
-    library::{self},
-    utils, waitln,
-};
+use crate::{app::MoveSubcommand, colorln, fomod, library, utils, waitln};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GlobalConfig {

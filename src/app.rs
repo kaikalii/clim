@@ -83,7 +83,12 @@ pub enum App {
     Uninstall {
         #[structopt(help = "The names of the mods to uninstall")]
         names: Vec<String>,
-        #[structopt(long, help = "Delete the archives as well")]
+        #[structopt(
+            long,
+            short,
+            alias = "delete-archive",
+            help = "Delete the archives as well"
+        )]
         delete_archives: bool,
         #[structopt(long, help = "Uninstall all mods")]
         all: bool,
