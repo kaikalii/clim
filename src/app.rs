@@ -5,7 +5,7 @@ use structopt::StructOpt;
 #[derive(Debug, StructOpt)]
 #[structopt(about = "Command-line interface mod manager")]
 pub enum App {
-    #[structopt(about = "Add a game to climm")]
+    #[structopt(about = "Add a game to clim")]
     Init {
         #[structopt(help = "The name of the game")]
         name: String,

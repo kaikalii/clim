@@ -12,7 +12,7 @@ pub enum Error {
     NoHomeDirectory,
     #[error("No user downloads folder")]
     NoDownloadsDirectory,
-    #[error("Climm already manages {0}")]
+    #[error("clim already manages {0}")]
     AlreadyManaged(String),
     #[error("Unknown game: {0}")]
     UnknownGame(String),

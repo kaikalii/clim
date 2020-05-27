@@ -203,7 +203,7 @@ where
             if starts_with_num {
                 if !any_parts {
                     println!(
-                        "{:?} has a Fomod installer, but climm does not currently support it. \
+                        "{:?} has a Fomod installer, but clim does not currently support it. \
                         You can still select which sections you want to install.",
                         mod_name
                     );

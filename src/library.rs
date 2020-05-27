@@ -22,18 +22,18 @@ where
     }
 }
 
-pub fn climm_dir() -> crate::Result<PathBuf> {
+pub fn clim_dir() -> crate::Result<PathBuf> {
     dirs::home_dir()
         .ok_or(crate::Error::NoHomeDirectory)
-        .and_then(|home| home.join(".climm").and_create_dirs())
+        .and_then(|home| home.join(".clim").and_create_dirs())
 }
 
 pub fn global_config() -> crate::Result<PathBuf> {
-    climm_dir().map(|climm| climm.join("config.toml"))
+    clim_dir().map(|clim| clim.join("config.toml"))
 }
 
 pub fn game_dir(game: &str) -> crate::Result<PathBuf> {
-    climm_dir().and_then(|climm| climm.join(game).and_create_dirs())
+    clim_dir().and_then(|clim| clim.join(game).and_create_dirs())
 }
 
 pub fn archives_dir(game: &str) -> crate::Result<PathBuf> {

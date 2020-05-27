@@ -64,7 +64,7 @@ impl GlobalConfig {
         }
         .save()?;
         library::archives_dir(&name)?;
-        println!("Climm initialized {}", name);
+        println!("clim initialized {}", name);
         Ok(())
     }
     pub fn game(&self, name: &str) -> crate::Result<Game> {
@@ -180,7 +180,7 @@ pub struct Game {
     pub config: Config,
 }
 
-const GAME_CONFIG_FILE: &str = "climm.toml";
+const GAME_CONFIG_FILE: &str = "clim.toml";
 
 fn game_config_file(name: &str) -> crate::Result<PathBuf> {
     library::game_dir(name).map(|game_dir| game_dir.join(GAME_CONFIG_FILE))
