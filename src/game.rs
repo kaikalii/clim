@@ -6,7 +6,7 @@ use std::{
     process::Command,
 };
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use pathdiff::diff_paths;
 use serde_derive::{Deserialize, Serialize};
@@ -55,6 +55,8 @@ impl GlobalConfig {
                 exe,
                 deployment: DeploymentMethod::default(),
                 mods: IndexMap::new(),
+                curr_profile: None,
+                profiles: IndexMap::new(),
             },
         }
         .save()?;
@@ -138,7 +140,10 @@ pub struct Config {
     pub plugins_file: Option<PathBuf>,
     pub exe: Option<PathBuf>,
     pub deployment: DeploymentMethod,
+    pub curr_profile: Option<String>,
     pub mods: IndexMap<String, ManagedMod>,
+    #[serde(skip_serializing_if = "IndexMap::is_empty")]
+    pub profiles: IndexMap<String, IndexSet<String>>,
 }
 
 fn install_dir(
@@ -582,6 +587,50 @@ impl Game {
                 self.config.mods = new_mods;
             }
         }
+        Ok(())
+    }
+    pub fn new_profile(&mut self, profile_name: String) -> crate::Result<()> {
+        if self.config.mods.contains_key(&profile_name) {
+            Err(crate::Error::ProfileExists(profile_name))
+        } else {
+            self.config
+                .profiles
+                .insert(profile_name.clone(), IndexSet::new());
+            self.config.curr_profile = Some(profile_name);
+            self.save_profile()
+        }
+    }
+    pub fn save_profile(&mut self) -> crate::Result<()> {
+        let profile_name = self
+            .config
+            .curr_profile
+            .as_ref()
+            .ok_or(crate::Error::NoProfileLoaded)?;
+        let profile = self
+            .config
+            .profiles
+            .get_mut(profile_name)
+            .ok_or_else(|| crate::Error::UnknownProfile(profile_name.clone()))?;
+        *profile = self
+            .config
+            .mods
+            .iter()
+            .filter(|(_, mm)| mm.enabled)
+            .map(|(mod_name, _)| mod_name.clone())
+            .collect();
+        println!("Profile saved");
+        Ok(())
+    }
+    pub fn set_profile(&mut self, profile_name: String) -> crate::Result<()> {
+        let profile = self
+            .config
+            .profiles
+            .get_mut(&profile_name)
+            .ok_or_else(|| crate::Error::UnknownProfile(profile_name.clone()))?;
+        for (mod_name, mm) in &mut self.config.mods {
+            mm.enabled = profile.contains(mod_name);
+        }
+        self.config.curr_profile = Some(profile_name);
         Ok(())
     }
 }

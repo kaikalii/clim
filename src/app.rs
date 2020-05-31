@@ -93,6 +93,11 @@ pub enum App {
         #[structopt(long, help = "Uninstall all mods")]
         all: bool,
     },
+    #[structopt(about = "Manage profiles")]
+    Profile {
+        #[structopt(subcommand)]
+        sub: Option<ProfileSubcommand>,
+    },
     #[structopt(about = "Set the active game")]
     SetActive {
         #[structopt(help = "The name of the game")]
@@ -127,5 +132,21 @@ pub enum MoveSubcommand {
     Up {
         #[structopt(help = "The number of spots to move up")]
         n: Option<usize>,
+    },
+}
+
+#[derive(Debug, StructOpt)]
+pub enum ProfileSubcommand {
+    #[structopt(about = "Create a new profile and save the current modlist to it")]
+    New {
+        #[structopt(help = "The name for the new profile")]
+        name: String,
+    },
+    #[structopt(about = "Save the current profile")]
+    Save,
+    #[structopt(about = "Set the current profile")]
+    Set {
+        #[structopt(help = "The name of the profile to change to")]
+        name: String,
     },
 }

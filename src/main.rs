@@ -96,6 +96,20 @@ fn run() -> Result<()> {
                 }
             }
         }
+        App::Profile { sub } => {
+            let mut game = gc.active_game()?;
+            if let Some(sub) = sub {
+                match sub {
+                    ProfileSubcommand::New { name } => game.new_profile(name)?,
+                    ProfileSubcommand::Save => game.save_profile()?,
+                    ProfileSubcommand::Set { name } => game.set_profile(name)?,
+                }
+            } else if let Some(profile_name) = &game.config.curr_profile {
+                println!("{}", profile_name)
+            } else {
+                println!("No profile loaded")
+            }
+        }
         App::SetActive { name } => {
             if gc.games.contains(&name) {
                 println!("Set {:?} as active game", name);

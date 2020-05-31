@@ -32,6 +32,12 @@ pub enum Error {
     NoGameExectuable,
     #[error("Error extracting {archive:?} (error code {code:?})")]
     Extraction { archive: PathBuf, code: Option<i32> },
+    #[error("Unknown profile {0:?}")]
+    UnknownProfile(String),
+    #[error("No profile loaded")]
+    NoProfileLoaded,
+    #[error("Profile exists {0:?}")]
+    ProfileExists(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
