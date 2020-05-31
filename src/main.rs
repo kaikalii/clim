@@ -102,7 +102,9 @@ fn run() -> Result<()> {
                 match sub {
                     ProfileSubcommand::New { name } => game.new_profile(name)?,
                     ProfileSubcommand::Save => game.save_profile()?,
-                    ProfileSubcommand::Set { name } => game.set_profile(name)?,
+                    ProfileSubcommand::Set { name, disable_new } => {
+                        game.set_profile(name, disable_new)?
+                    }
                 }
             } else if let Some(profile_name) = &game.config.curr_profile {
                 println!("{}", profile_name)

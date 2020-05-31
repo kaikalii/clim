@@ -6,7 +6,7 @@ use std::{
     process::Command,
 };
 
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
 use itertools::Itertools;
 use pathdiff::diff_paths;
 use serde_derive::{Deserialize, Serialize};
@@ -143,7 +143,7 @@ pub struct Config {
     pub curr_profile: Option<String>,
     pub mods: IndexMap<String, ManagedMod>,
     #[serde(skip_serializing_if = "IndexMap::is_empty")]
-    pub profiles: IndexMap<String, IndexSet<String>>,
+    pub profiles: IndexMap<String, IndexMap<String, ManagedMod>>,
 }
 
 fn install_dir(
@@ -595,7 +595,7 @@ impl Game {
         } else {
             self.config
                 .profiles
-                .insert(profile_name.clone(), IndexSet::new());
+                .insert(profile_name.clone(), IndexMap::new());
             self.config.curr_profile = Some(profile_name);
             self.save_profile()
         }
@@ -611,25 +611,25 @@ impl Game {
             .profiles
             .get_mut(profile_name)
             .ok_or_else(|| crate::Error::UnknownProfile(profile_name.clone()))?;
-        *profile = self
-            .config
-            .mods
-            .iter()
-            .filter(|(_, mm)| mm.enabled)
-            .map(|(mod_name, _)| mod_name.clone())
-            .collect();
+        *profile = self.config.mods.clone();
         println!("Profile saved");
         Ok(())
     }
-    pub fn set_profile(&mut self, profile_name: String) -> crate::Result<()> {
+    pub fn set_profile(&mut self, profile_name: String, disable_new: bool) -> crate::Result<()> {
         let profile = self
             .config
             .profiles
             .get_mut(&profile_name)
             .ok_or_else(|| crate::Error::UnknownProfile(profile_name.clone()))?;
         for (mod_name, mm) in &mut self.config.mods {
-            mm.enabled = profile.contains(mod_name);
+            if let Some(profile_mm) = profile.get(mod_name) {
+                *mm = profile_mm.clone();
+            } else {
+                mm.enabled = !disable_new;
+                mm.parts.clear();
+            }
         }
+        println!("Loaded profile {:?}", profile_name);
         self.config.curr_profile = Some(profile_name);
         Ok(())
     }

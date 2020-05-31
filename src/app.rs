@@ -148,5 +148,7 @@ pub enum ProfileSubcommand {
     Set {
         #[structopt(help = "The name of the profile to change to")]
         name: String,
+        #[structopt(long, short, help = "Disable new mods")]
+        disable_new: bool,
     },
 }
